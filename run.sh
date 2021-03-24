@@ -5,9 +5,9 @@ helpFunction()
    echo "AI MAS Client - 2021 DTU Final Project"
    echo ""
    echo "Usage: $0 -m level -t time out -s speed"
-   echo "\t-m level found inside ROOT/levels/"
+   echo "\t-m level to be executed. Should be found inside ROOT/levels/"
    echo "\t-t server timeout"
-   echo "\t-s action replay speed"
+   echo "\t-s server action replay speed"
    echo "\t-h display this message"
    echo ""
    exit 1
