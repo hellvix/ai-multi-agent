@@ -2,7 +2,7 @@
 
 helpFunction()
 {
-   echo "AI MAS Client - 2021 DTU Final Project"
+   echo "AI MAS Client - 2021 DTU - Group 28 Final Project"
    echo ""
    echo "Usage: $0 -m level -t time out -s speed"
    echo "\t-m level to be executed. Should be found inside ROOT/levels/"
