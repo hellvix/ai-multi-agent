@@ -10,12 +10,14 @@ class Level(object):
     """
 
     def __init__(self, layout: list, num_rows: int, num_cols: int):
-        # Representation of the level in Location objects
+        # Representation of the level in Location objects, ignoring outside walls.
+        # This means row 1 in the level is actually located in row 0 in this array.
         # [
         #   [L1,1, L1,2, L1,3],
         #   [L2,1, L2,2, ... ]
         # ]
-        self.__layout = layout  # Level layout, ignoring outside walls.
+
+        self.__layout = layout
         self.__num_rows = num_rows  # Total number of rows (counting outside walls)
         self.__num_cols = num_cols  # Total number of cols (counting outside walls)
         

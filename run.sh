@@ -47,4 +47,5 @@ fi
 echo ""
 echo "Starting application..."
 echo ""
-java -jar server.jar -l levels/$level -c "python bin/main.py" -g -s $speed -t $timeout
+
+java -jar server.jar -l "levels/$level" -c "python bin/main.py" -g -s $speed -t $timeout
