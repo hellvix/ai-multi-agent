@@ -13,7 +13,7 @@ class RaceType(Enum):
     AGENTS = 1
 
 
-class Configuration:
+class Configuration(object):
     def __init__(self, raw_data: dict):
         
         # Configuration type: only agents? boxes?

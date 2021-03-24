@@ -4,7 +4,7 @@ import numpy as np
 from location import Location
 
 
-class Level:
+class Level(object):
     """A redifined definition of a level
     Defines locations as a a set of locations, together with its neighbors.
     """

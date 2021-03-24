@@ -3,7 +3,7 @@ import heapq
 import numpy as np
 
 
-class Location:
+class Location(object):
     def __init__(self, pos_row: int, pos_col: int):
         self.__pos_row = pos_row  # col
         self.__pos_col = pos_col  # row

@@ -6,7 +6,7 @@ from configuration import Configuration
 globals().update(Action.__members__)
 
 
-class Controller:
+class Controller(object):
     def __init__(self, configuration: Configuration):
         self.__parse_config__(configuration)
     

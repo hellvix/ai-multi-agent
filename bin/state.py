@@ -1,6 +1,6 @@
 
 
-class State:
+class State(object):
     def is_applicable(self, agent: 'Agent', action: 'Action') -> 'bool':
         pass
 

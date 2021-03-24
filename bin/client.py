@@ -10,7 +10,7 @@ from configuration import Configuration
 from controller import Controller
 
 
-class Client:
+class Client(object):
     @staticmethod
     def parse_level(server_messages) -> 'Configuration':
         # We can assume that the level file is conforming to specification, since the server verifies this.
