@@ -1,4 +1,3 @@
-from level import Level
 from action import Action
 from configuration import Configuration
 
@@ -22,9 +21,13 @@ class Controller(object):
         pass
     
     def deploy(self) -> '[Action, ...]':
+        # Here starts the algorithm
         return [
             [MoveS],
             [MoveE],
             [MoveE],
-            [MoveS]
+            [MoveS],
+            [MoveS],
+            [MoveS],
+            [MoveE]
         ]

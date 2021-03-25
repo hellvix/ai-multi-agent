@@ -36,7 +36,7 @@ class Level(object):
         Returns:
             int: number of rows
         """
-        return self.__num_rows - 1
+        return self.num_rows - 2
     
     @property
     def num_cols(self):
@@ -49,4 +49,20 @@ class Level(object):
         Returns:
             int: number of cols
         """
-        return self.__num_cols - 1
+        return self.num_cols - 2
+    
+    def get_location(self, coordinates: tuple) -> Location:
+        """Given the coordinates (matrix indexes), which object location is at this position?
+        Important: the layout vector is 0-indexed, this means L1,1 is located at position [0][0]
+
+        Args:
+            coordinates (tuple): (row, col)
+
+        Returns:
+            Location: object at this index
+        """
+        row, col = coordinates
+        try:
+            return self.__layout[row][col]
+        except IndexError:
+            raise Exception("Coordinates do not exist.")

@@ -6,7 +6,7 @@ Winter 2021 DTU 02285 Artificial Intelligence and Multi-Agent Systems course pro
 
 
 
-## Group Members
+## Group 28 - Members
 
 
 
@@ -16,11 +16,11 @@ Winter 2021 DTU 02285 Artificial Intelligence and Multi-Agent Systems course pro
 
         Dimosthenis Karafylias - s202632
 
-        Prashanna Raveendra Kumar- s192140
+        Prashanna Raveendra Kumar - s192140
 
 
 
-This readme describes how to use the included Python client with the server that is contained in server.jar. 
+This readme describes how to use the re-written version of the Python client with the server. 
 
 
 

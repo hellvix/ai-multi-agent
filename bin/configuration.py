@@ -114,8 +114,8 @@ class Configuration(object):
 
         for entries in layout:
             for loc in entries:
-                crow = loc.pos_row
-                ccol = loc.pos_col
+                crow = loc.row
+                ccol = loc.col
                 loc.is_wall = raw_walls[crow][ccol]
 
                 # We don't generate neighbors for walls
