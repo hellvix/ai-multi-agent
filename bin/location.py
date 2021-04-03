@@ -10,8 +10,6 @@ class Location(object):
         self.__pos_col = col  # row
         self.__neighbors = None
         self.is_wall = None
-        self.is_goal = None
-        self.__actor = None # Box or Agent ocuppying the location
 
         self._hash = None
 
@@ -41,34 +39,6 @@ class Location(object):
             return False
         
         return True
-    
-    @property
-    def actor(self) -> Actor:
-        return self.__actor
-    
-    @property
-    def is_empty(self):
-        return not self.__actor
-    
-    def place_actor(self, actor: Actor):
-        """Place an actor at this location.
-
-        Args:
-            actor (Actor): Box / Agent
-
-        Raises:
-            Exception: Location already occuppied
-        """
-        if not self.is_empty:
-            raise Exception('Location already ocupied with %s.' % self.__actor)
-        
-        self.__actor = actor
-        self.__actor.move(self)
-        
-    def displace(self):
-        """Free location
-        """
-        self.__actor = None
         
     @property
     def row(self):

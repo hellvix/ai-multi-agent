@@ -43,9 +43,16 @@ class Configuration(object):
         """
         return self.__type
     
-    def build_goals(self) -> dict:
+    def __build_goals(self, level: Level) -> dict:
+        """Dictionary with goals. Key is goal name (A, B, 0, 1...) and value is a Location object.
+
+        Args:
+            level (Level): [description]
+
+        Returns:
+            dict: [description]
+        """
         _raw_goals = self.__raw_goals
-        
         _goals = {}
         
         for row in range(1, self.level_row_cnt - 1):
@@ -54,12 +61,13 @@ class Configuration(object):
                 
                 if p_goal:
                     _goals.update({
-                        p_goal: Location(row, col)
+                        p_goal: level.get_location((row, col), translate=True)
                     })
-                    
+
         return _goals
     
-    def build_agents(self) -> '[Agent, ...]':
+    def __build_agents(self, level: Level) -> '[Agent, ...]':
+        
         # Raw
         _agent_rows = self.__raw_agents[0]
         _agent_cols = self.__raw_agents[1]
@@ -70,14 +78,14 @@ class Configuration(object):
         # Every index represents an agent in in _agent_rows
         for a_id, a_row in enumerate(_agent_rows):
             a_col = _agent_cols[a_id]
-            a_loc = Location(a_row, a_col)
+            a_loc = level.get_location((a_row, a_col), translate=True)
             a_color = Color(_agent_colors[a_id])
             
             _agents = np.append(_agents, Agent(a_id, a_loc, a_color))
 
         return _agents
     
-    def build_boxes(self) -> '[Box, ...]':
+    def __build_boxes(self, level: Level) -> '[Box, ...]':
                
         # Raw
         _box_positions = self.__raw_boxes
@@ -92,7 +100,7 @@ class Configuration(object):
                 if p_box:
                     c_box = ord(p_box) - ord('A')
                     b_color = _box_colors[c_box]
-                    b_loc = Location(row, col)
+                    b_loc = level.get_location((row, col), translate=True)
                     _boxes = np.append(_boxes, Box(p_box, b_loc, b_color))
         
         # Change configuration type
@@ -100,7 +108,7 @@ class Configuration(object):
 
         return _boxes
         
-    def build_level(self):
+    def __build_level(self):
         """Builds an adjacent list with locations and its neighbors
         """
         raw_walls = self.__raw_walls
@@ -116,7 +124,7 @@ class Configuration(object):
             for loc in entries:
                 crow = loc.row
                 ccol = loc.col
-                loc.is_wall = raw_walls[crow][ccol]
+                loc.is_wall = raw_walls[crow][ccol]  # Whether location is wall
 
                 # We don't generate neighbors for walls
                 if not loc.is_wall:
@@ -134,3 +142,11 @@ class Configuration(object):
                         layout[nrow-1][ncol-1] for nrow, ncol in positions if not raw_walls[nrow][ncol]
                     )
         return Level(layout, row_cnt, col_cnt)
+    
+    def build_structure(self):
+        __level = self.__build_level()
+        __agents = self.__build_agents(__level)
+        __boxes = self.__build_boxes(__level)
+        __goals = self.__build_goals(__level)
+        
+        return __level, __agents, __boxes, __goals

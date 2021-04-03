@@ -44,7 +44,10 @@ class Actor(metaclass=ABCMeta):
         return self.__identifier
 
     def move(self, location: 'Location'):
-        # Leaves previous location first
-        if self.__location:
-            self.__location.displace()
+        """Change actor location. Should not be called without checking whether
+        the new Location is already occupied.
+
+        Args:
+            location (Location): [description]
+        """
         self.__location = location

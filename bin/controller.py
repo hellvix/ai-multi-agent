@@ -12,22 +12,13 @@ class Controller(object):
     def __parse_config__(self, configuration: Configuration):
         """Parses Configuration into data structure with objects
         """
-        self.__level = configuration.build_level()
-        self.__agents = configuration.build_agents()
-        self.__boxes = configuration.build_boxes()
-        self.__goals = configuration.build_goals()
-        
+        self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
+                
     def __spawn_state__(self):
         pass
     
     def deploy(self) -> '[Action, ...]':
         # Here starts the algorithm
+        
         return [
-            [MoveS],
-            [MoveE],
-            [MoveE],
-            [MoveS],
-            [MoveS],
-            [MoveS],
-            [MoveE]
         ]

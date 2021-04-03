@@ -21,6 +21,14 @@ class Level(object):
         self.__num_rows = num_rows  # Total number of rows (counting outside walls)
         self.__num_cols = num_cols  # Total number of cols (counting outside walls)
         
+    def __hash__(self):
+        if self._hash is None:
+            prime = 31
+            _hash = 1
+            _hash = _hash * prime + hash(tuple(self.__layout))
+            self._hash = _hash
+        return self._hash
+        
     @property
     def layout(self):
         return self.__layout
@@ -51,18 +59,24 @@ class Level(object):
         """
         return self.num_cols - 2
     
-    def get_location(self, coordinates: tuple) -> Location:
+    def get_location(self, coordinates: tuple, translate=False) -> Location:
         """Given the coordinates (matrix indexes), which object location is at this position?
         Important: the layout vector is 0-indexed, this means L1,1 is located at position [0][0]
+        
+        If translate is True, then the coordinates are converted to 0-based indexes.
 
         Args:
             coordinates (tuple): (row, col)
+            translate (bol): whether the coordinates are 0-index-based or not
 
         Returns:
             Location: object at this index
         """
         row, col = coordinates
         try:
+            if translate:
+                row = row - 1
+                col = col - 1
             return self.__layout[row][col]
         except IndexError:
             raise Exception("Coordinates do not exist.")
