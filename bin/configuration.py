@@ -1,5 +1,6 @@
 import numpy as np
 from box import Box
+from goal import Goal
 from agent import Agent
 from level import Level
 from color import Color
@@ -57,11 +58,20 @@ class Configuration(object):
         
         for row in range(1, self.level_row_cnt - 1):
             for col in range(1, self.level_col_cnt - 1):
-                p_goal = _raw_goals[row][col]
+                gl_label = _raw_goals[row][col]
                 
-                if p_goal:
+                if gl_label:
+                    loc = level.get_location((row, col), translate=True)
+                    
+                    if 'A' <= gl_label <= 'Z':
+                        color = Color(self.__raw_box_colors[ord(gl_label) - ord('A')])
+                    elif '0' <= gl_label <= '9':
+                        color = Color(self.__raw_agent_colors[ord(gl_label) - ord('0')])
+                    else:
+                        raise Exception('Unsupported type of goal.')
+                    
                     _goals.update({
-                        p_goal: level.get_location((row, col), translate=True)
+                        loc: Goal(gl_label, loc, color)
                     })
 
         return _goals

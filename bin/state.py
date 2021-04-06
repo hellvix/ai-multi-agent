@@ -1,11 +1,27 @@
 from level import Level
 from agent import Agent
-from Location import Location
+from action import Action
+from location import Location
 
 
 class State(object):
     def __init__(self, level: Level, agents: '[Agent, ...]', boxes: '[Box, ...]', goals: '[Location, ...]'):
-        pass
+        self.__level = level
+        self.__agents = agents
+        self.__boxes = boxes
+        self.__goals = goals
+
+        self.__gl_reach = len(goals)  # Number of unreached goals
+        
+    def __hash__(self):
+        if self._hash is None:
+            prime = 31
+            _hash = 1
+            _hash = _hash * prime + hash(tuple(self.__agents))
+            _hash = _hash * prime + hash(tuple(self.__goals))
+
+            self._hash = _hash
+        return self._hash
     
     def is_goal_state(self) -> 'bool':
         pass

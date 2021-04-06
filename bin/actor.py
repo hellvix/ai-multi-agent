@@ -11,7 +11,7 @@ class Actor(metaclass=ABCMeta):
     def __str__(self):
         return '{}{} ({}) at {}'.format(
             self.__actor_type__(),
-            self.__identifier,
+            self.identifier,
             self.__color,
             self.__location
         )
@@ -20,10 +20,19 @@ class Actor(metaclass=ABCMeta):
         if self.__color != value.color:
             return False
 
-        if self.__identifier != value.identifier:
+        if self.identifier != value.identifier:
             return False
 
         return True
+    
+    def __hash__(self):
+        if self._hash is None:
+            prime = 31
+            _hash = 1
+            _hash = _hash * prime + hash(self.__str__())
+            _hash = _hash * prime + hash(tuple((self.__location.row, self.__location.col)))
+            self._hash = _hash
+        return self._hash
 
     def __repr__(self):
         return self.__str__()
@@ -41,7 +50,7 @@ class Actor(metaclass=ABCMeta):
     
     @property
     def identifier(self):
-        return self.__identifier
+        return str(self.__identifier)
 
     def move(self, location: 'Location'):
         """Change actor location. Should not be called without checking whether
