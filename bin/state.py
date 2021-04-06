@@ -4,6 +4,9 @@ class State(object):
     def __init__(self):
         pass
     
+    def is_goal_state(self) -> 'bool':
+        pass
+    
     def is_applicable(self, agent: 'Agent', action: 'Action') -> 'bool':
         pass
 
