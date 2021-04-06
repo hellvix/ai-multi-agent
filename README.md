@@ -24,6 +24,10 @@ This readme describes how to use the re-written version of the Python client wit
 
 
 
+For convenience, a bash script was added, type `run.sh -h` for usage.
+
+
+
 The Python search client requires at least Python version 3.8, and has been tested with CPython.
 
 
