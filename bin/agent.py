@@ -17,7 +17,7 @@ class Agent(Actor):
             return False
 
         return super().__eq__(value)
-<<<<<<< Updated upstream
+
     
     def __hash__(self):
         if self._hash is None:
@@ -43,10 +43,4 @@ class Agent(Actor):
     @goals.setter
     def goals(self, value):
         self.__goals = value
-=======
-        
-        
-        
-    
->>>>>>> Stashed changes
 

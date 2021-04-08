@@ -70,62 +70,62 @@ class Controller(object):
     
         return _goals
         
-        
+
         
     # ======= Dimos ==========
     
     def generate_move(path):
 
-    x = map(lambda xval: xval[0], path)
-    x = list(x)
+        x = map(lambda xval: xval[0], path)
+        x = list(x)
 
-    y = map(lambda yval: yval[1], path)
-    y = list(y)
+        y = map(lambda yval: yval[1], path)
+        y = list(y)
 
-    path_x = []
-    path_y = []
+        path_x = []
+        path_y = []
 
-    for xval in range(len(x)-1):
+        for xval in range(len(x)-1):
 
-        if x[xval+1] > x[xval]:
-            path_x.append('MoveE')
+            if x[xval+1] > x[xval]:
+                path_x.append(MoveE)
 
-        elif x[xval+1] < x[xval]:
-            path_x.append('MoveW')
+            elif x[xval+1] < x[xval]:
+                path_x.append(MoveW)
 
-        elif x[xval+1] == x[xval]:
-            path_x.append('same x')
+            elif x[xval+1] == x[xval]:
+                path_x.append('same x')
 
-        else:
-            print('none of the above')
+            else:
+                pass
 
-    for yval in range(len(y)-1):
+        for yval in range(len(y)-1):
 
-        if y[yval+1] > y[yval]:
-            path_y.append('MoveS')
+            if y[yval+1] > y[yval]:
+                path_y.append(MoveS)
 
-        elif y[yval+1] < y[yval]:
-            path_y.append('MoveN')
+            elif y[yval+1] < y[yval]:
+                path_y.append(MoveN)
 
-        elif y[yval+1] == y[yval]:
-            path_y.append('same location')
+            elif y[yval+1] == y[yval]:
+                path_y.append('same location')
 
-        else:
-            print('none of the above')
+            else:
+                pass
 
-    for i in path_x:
+        for i in path_x:
 
-        if i == 'same x':
+            if i == 'same x':
 
-            index = path_x.index(i)
+                index = path_x.index(i)
 
-            path_x[index] = path_y[index]
+                path_x[index] = path_y[index]
 
-        else:
-            pass
+            else:
+                pass
 
-    moves = path_x
+        moves = path_x
 
-generate_move()
+    generate_move()
 
 
