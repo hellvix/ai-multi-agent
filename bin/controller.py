@@ -70,13 +70,17 @@ class Controller(object):
     
         return _goals
 
-    def find_path(self, start: Location, end: Location):
+    def find_path(self, start: Location, end: Location):       
+         	       
+                
+    	def h(start: Location, end: Location):
+        	return abs((start.col - end.col) + (start.row - end.row))
+
         
-        def h(child, end):
-            # @TODO needs implementation
-            return
-        
-        open_list = []  # @TODO: needs proper declaration. Is it a list or a set?
+        """It's a list of tuples of locations and it's f score. Before adding each new element we check if it's already inside, so technically 
+        it acts like a set """
+        open_list = []  # @TODO: needs proper declaration. 
+
         closed_list = [] # @TODO: needs proper declaration. Is it a list or a set?
 
         current_node = (start, 0)
