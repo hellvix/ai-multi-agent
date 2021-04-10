@@ -71,14 +71,28 @@ class Controller ( object ):
 
     def generate_move(path):
 
-        x = map ( lambda xval: xval[0], path )
-        x = list ( x )
-
-        y = map ( lambda yval: yval[1], path )
+        y = map ( lambda yval: yval[0], path )
         y = list ( y )
+
+        x = map ( lambda xval: xval[1], path )
+        x = list ( x )
 
         path_x = []
         path_y = []
+
+        for yval in range ( len ( y ) - 1 ):
+
+            if y[yval + 1] > y[yval]:
+                path_y.append ( MoveS )
+
+            elif y[yval + 1] < y[yval]:
+                path_y.append ( MoveN )
+
+            elif y[yval + 1] == y[yval]:
+                path_y.append ( 'same y' )
+
+            else:
+                pass
 
         for xval in range ( len ( x ) - 1 ):
 
@@ -94,31 +108,18 @@ class Controller ( object ):
             else:
                 pass
 
-        for yval in range ( len ( y ) - 1 ):
+        for i in path_y:
 
-            if y[yval + 1] > y[yval]:
-                path_y.append ( MoveS )
+            if i == 'same y':
 
-            elif y[yval + 1] < y[yval]:
-                path_y.append ( MoveN )
+                index = path_y.index ( i )
 
-            elif y[yval + 1] == y[yval]:
-                raise Exception ( "Controller - Exception: Agent is in same location" )
+                path_y[index] = path_x[index]
 
             else:
                 pass
 
-        for i in path_x:
+        moves = path_y
 
-            if i == 'same x':
+    generate_move()
 
-                index = path_x.index ( i )
-
-                path_x[index] = path_y[index]
-
-            else:
-                pass
-
-        moves = path_x
-
-    generate_move ()
