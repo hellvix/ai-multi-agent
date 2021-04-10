@@ -23,9 +23,9 @@ class Controller(object):
     
     def deploy(self) -> [Action, ...]:
         # Here starts the algorithm
-        agt = self.__agents[2]
-        agt.goals = self.goals_for_agent(agt)
-        print(agt.goals, flush=True)
+        agt = self.__agents[0]
+        path = self.find_path(agt.location, self.goals_for_agent(agt)[0])
+        print(path, flush=True)
 
         return [
         ]
@@ -70,12 +70,16 @@ class Controller(object):
     
         return _goals
 
+    def find_path(self, start: Location, end: Location):
+        
+        def h(child, end):
+            # @TODO needs implementation
+            return
+        
+        open_list = []  # @TODO: needs proper declaration. Is it a list or a set?
+        closed_list = [] # @TODO: needs proper declaration. Is it a list or a set?
 
-# AStar Algorithm  
-
-def find_path(start: Location, end: Location):
-
-		current_node = (start, 0)
+        current_node = (start, 0)
         open_list.append(current_node)
 
         while len(open_list) > 0:
@@ -93,7 +97,7 @@ def find_path(start: Location, end: Location):
                     continue
 
                 if child.is_wall:
-                	continue
+                    continue
                     
                 child_h = h(child, end)
                 child_g = current_node[1] - child_h + 1
@@ -104,4 +108,4 @@ def find_path(start: Location, end: Location):
                 
                 open_list.append((child, child_f))
 
-		return closed_list
+        return closed_list
