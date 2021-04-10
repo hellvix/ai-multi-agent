@@ -53,4 +53,7 @@ echo ""
 echo "###########################"
 echo ""
 
+echo "java -jar server.jar -l "levels/$level" -c \"python bin/main.py\" -g -s $speed -t $timeout"
+echo ""
+
 java -jar server.jar -l "levels/$level" -c "python bin/main.py" -g -s $speed -t $timeout
