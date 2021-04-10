@@ -69,3 +69,39 @@ class Controller(object):
             raise Exception('Agent %s does not have a goal.' % agent)
     
         return _goals
+
+
+# AStar Algorithm  
+
+def find_path(start: Location, end: Location):
+
+		current_node = (start, 0)
+        open_list.append(current_node)
+
+        while len(open_list) > 0:
+
+            if current_node[0] == end:
+                break
+                
+            current_node = min(open_list, key = lambda t: t[1])
+            closed_list.add(current_node)
+            open_list.remove(current_node)
+
+            for child in current_node[0].neighbors():
+                
+                if child in closed_list:
+                    continue
+
+                if child.is_wall:
+                	continue
+                    
+                child_h = h(child, end)
+                child_g = current_node[1] - child_h + 1
+                child_f = child_h + child_g
+                
+                if child in open_list and child_f > [node[0] for node in open_list if node[0] == child]:
+                    continue
+                
+                open_list.append((child, child_f))
+
+		return closed_list
