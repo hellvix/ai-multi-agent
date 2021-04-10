@@ -24,11 +24,17 @@ class Controller(object):
     def deploy(self) -> [Action, ...]:
         # Here starts the algorithm
         agt = self.__agents[0]
-        path = self.find_path(agt.location, self.goals_for_agent(agt)[0])
-        print(path, flush=True)
-
-        return [
-        ]
+        actions = self.generate_move(
+            [
+                (5, 1),
+                (5, 2),
+                (4, 2),
+                (4, 3),
+                (4, 4)
+            ]
+        )
+        print(actions, flush=True)
+        return actions
         
     def goals_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
@@ -109,3 +115,62 @@ class Controller(object):
                 open_list.append((child, child_f))
 
         return closed_list
+
+    def generate_move(self, path: '[tuple, ....]') -> '[Actions, ...]':
+        """Generate actions based on given locations.
+
+        Args:
+            path ([type]): list of locations
+        
+        Author: dimos
+
+        Returns:
+            [type]: list of actions
+        """
+
+        y = map(lambda yval: yval[0], path)
+        y = list(y)
+
+        x = map(lambda xval: xval[1], path)
+        x = list(x)
+
+        path_x = []
+        path_y = []
+
+        for yval in range(len(y) - 1):
+
+            if y[yval + 1] > y[yval]:
+                path_y.append([MoveS, ])
+
+            elif y[yval + 1] < y[yval]:
+                path_y.append([MoveN, ])
+
+            elif y[yval + 1] == y[yval]:
+                path_y.append('same y')
+
+            else:
+                pass
+
+        for xval in range(len(x) - 1):
+
+            if x[xval + 1] > x[xval]:
+                path_x.append([MoveE, ])
+
+            elif x[xval + 1] < x[xval]:
+                path_x.append([MoveW, ])
+
+            elif x[xval + 1] == x[xval]:
+                path_x.append('same x')
+
+            else:
+                pass
+
+        for i in path_y:
+
+            if i == 'same y':
+                index = path_y.index(i)
+                path_y[index] = path_x[index]
+            else:
+                pass
+
+        return path_y
