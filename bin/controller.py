@@ -1,9 +1,11 @@
+import sys
+
 from state import State
 from color import Color
 from agent import Agent
 from action import Action
 from location import Location
-from configuration import Configuration
+from configuration import Configuration, RaceType
 
 
 globals().update(Action.__members__)
@@ -17,28 +19,32 @@ class Controller(object):
         """Parses Configuration into data structure with objects
         """
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
+        self.__strategy = configuration.race_type
                 
     def __spawn_state__(self):
         pass
-
     
     def deploy(self) -> [Action, ...]:
-        # Here starts the algorithm
-        agt = self.__agents[0]
+        if self.__strategy == RaceType.AGENTS:
+            _plan = []
+            
+            for a in self.__agents:
+                g = self.goals_for_agent(a)
 
+                if g: # This type of map only has one goal per agent
+                    g = g[0]
+                    _plan.extend(self.generate_move(self.find_path(a.location, g)))
+                else:
+                    _plan.extend([])
 
-        # placeholder, should put priorities in future first
-        path = self.find_path(
-            self.__level.get_location((1,1), translate=True),    # (1, 1)
-            self.__level.get_location((5,11), translate=True)   # (3, 10)
-            )
+            return [
+                [p] for p in _plan
+            ]
 
-        coords = []
-        for cell in path:
-            coords.append((cell.row, cell.col))
-
-        actions = self.generate_move(coords)
-        return actions
+        elif self.__strategy == RaceType.BOXES:
+            pass
+        else:
+            raise Exception("Cannot apply strategy to this level.")
         
     def goals_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
@@ -75,8 +81,8 @@ class Controller(object):
                     # Will fail if the location is not a goal
                     pass
         
-        if not _goals:
-            raise Exception('Agent %s does not have a goal.' % agent)
+        # if not _goals:
+        #     raise Exception('Agent %s does not have a goal.' % agent)
     
         return _goals
 
@@ -141,7 +147,7 @@ class Controller(object):
                 
                 open_list.append((child, child_f))
 
-    def generate_move(self, path: '[tuple, ....]') -> '[Actions, ...]':
+    def generate_move(self, path: '[Location, ...]') -> '[Actions, ...]':
         """Generate actions based on given locations.
 
         Author: dimos
@@ -153,10 +159,10 @@ class Controller(object):
             [type]: list of actions
         """
 
-        y = map(lambda yval: yval[0], path)
+        y = map(lambda yval: yval.row, path)
         y = list(y)
 
-        x = map(lambda xval: xval[1], path)
+        x = map(lambda xval: xval.col, path)
         x = list(x)
 
         path_x = []
@@ -165,13 +171,13 @@ class Controller(object):
         for yval in range(len(y) - 1):
 
             if y[yval + 1] == y[yval] + 1:
-                path_y.append([MoveS, ])
+                path_y.append(MoveS)
 
             elif y[yval + 1] == y[yval] - 1:
-                path_y.append([MoveN, ])
+                path_y.append(MoveN)
 
             elif y[yval + 1] == y[yval]:
-                path_y.append(['same y'])
+                path_y.append('same y')
 
             else:
                 raise Exception('Typo error: Agent cannot move 2 steps in y (rows) !')
@@ -179,29 +185,29 @@ class Controller(object):
         for xval in range(len(x) - 1):
 
             if x[xval + 1] == x[xval] + 1:
-                path_x.append([MoveE, ])
+                path_x.append(MoveE)
 
             elif x[xval + 1] == x[xval] - 1:
-                path_x.append([MoveW, ])
+                path_x.append(MoveW)
 
             elif x[xval + 1] == x[xval]:
-                path_x.append(['same x'])
+                path_x.append('same x')
 
             else:
                 raise Exception('Typo error: Agent cannot move 2 steps in x (columns) !')
 
         for i, j in zip(path_y, path_x):
 
-            if i == ['same y'] and j != ['same x']:
+            if i == 'same y' and j != 'same x':
                 index=path_y.index(i)
                 index2=path_x.index(j)
                 path_y[index]=path_x[index2]
 
-            elif i == ['same y'] and j == ['same x']:
+            elif i == 'same y' and j == 'same x':
                 index=path_y.index(i)
-                path_y[index]=([NoOp, ])
+                path_y[index]=(NoOp)
 
-            elif i != ['same y'] and j == ['same x']:
+            elif i != 'same y' and j == 'same x':
                 pass
 
             else:

@@ -9,7 +9,7 @@ class Actor(metaclass=ABCMeta):
         self.__color = color
 
     def __str__(self):
-        return '{}{} ({}) at {}'.format(
+        return '{}{} ({}) @{}'.format(
             self.__actor_type__(),
             self.identifier,
             self.__color,
@@ -36,6 +36,10 @@ class Actor(metaclass=ABCMeta):
 
     def __repr__(self):
         return self.__str__()
+    
+    @property
+    def id(self):
+        return self.__identifier
 
     @abstractmethod
     def __actor_type__(self): raise NotImplementedError

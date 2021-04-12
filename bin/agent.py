@@ -7,6 +7,7 @@ class Agent(Actor):
     def __init__(self, *args, **kwargs):
         self.__goals = set()  # List of Locations
         super().__init__(*args, **kwargs)
+        self._hash = None
     
     def __actor_type__(self):
         return 'Agent'
@@ -25,7 +26,7 @@ class Agent(Actor):
             _hash = _hash * prime + hash(self.__str__())
             _hash = _hash * prime + hash(tuple(self.__goals))
             _hash = _hash * prime + \
-                hash(tuple((self.__location.row, self.__location.col)))
+                hash(tuple((self.location.row, self.location.col)))
             self._hash = _hash
         return self._hash
     

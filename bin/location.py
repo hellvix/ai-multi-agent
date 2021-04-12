@@ -33,7 +33,9 @@ class Location(object):
 
     def __eq__(self, value):
         if not isinstance(value, Location):
-            raise Exception('Cannot compare Location with this type of object.')
+            raise Exception(
+                'Cannot compare Location with %s.' % type(value)
+            )
         
         if (self.row != value.row) or (self.col != value.col):
             return False
