@@ -80,19 +80,21 @@ class Controller(object):
     
         return _goals
 
+    def find_path(self, start: Location, end: Location):
+        """ Shanna's implementatoin of A*.
+        Finds the shorted path from A to B.
+        
+        Author: Shanna
 
+        Args:
+            start (Location): Start location
+            end (Location): End location
 
-    def find_path(self, start: Location, end: Location):       
-                   
-                
-        #def h(start: Location, end: Location):
-        #   return abs((start.col - end.col) + (start.row - end.row))
-
-      
-        open_list = []  # @TODO: needs proper declaration. 
-
-        closed_list = [] # @TODO: needs proper declaration. Is it a list or a set?
-
+        Returns:
+            [Location]: [Location, ...]
+        """
+        open_list = []
+        closed_list = []
         parent_list = [] # (child, parent)
 
         current_node = (start, 0)
@@ -139,15 +141,13 @@ class Controller(object):
                 
                 open_list.append((child, child_f))
 
-
-
     def generate_move(self, path: '[tuple, ....]') -> '[Actions, ...]':
         """Generate actions based on given locations.
 
+        Author: dimos
+
         Args:
             path ([type]): list of locations
-        
-        Author: dimos
 
         Returns:
             [type]: list of actions
