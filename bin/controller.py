@@ -20,20 +20,24 @@ class Controller(object):
                 
     def __spawn_state__(self):
         pass
+
     
     def deploy(self) -> [Action, ...]:
         # Here starts the algorithm
         agt = self.__agents[0]
-        actions = self.generate_move(
-            [
-                (5, 1),
-                (5, 2),
-                (4, 2),
-                (4, 3),
-                (4, 4)
-            ]
-        )
-        print(actions, flush=True)
+
+
+        # placeholder, should put priorities in future first
+        path = self.find_path(
+            self.__level.get_location((1,1), translate=True),    # (1, 1)
+            self.__level.get_location((5,11), translate=True)   # (3, 10)
+            )
+
+        coords = []
+        for cell in path:
+            coords.append((cell.row, cell.col))
+
+        actions = self.generate_move(coords)
         return actions
         
     def goals_for_agent(self, agent: Agent) -> [Location, ...]:
@@ -76,45 +80,66 @@ class Controller(object):
     
         return _goals
 
-    def find_path(self, start: Location, end: Location):
-        
-        def h(child, end):
-            # @TODO needs implementation
-            return
-        
-        open_list = []  # @TODO: needs proper declaration. Is it a list or a set?
+
+
+    def find_path(self, start: Location, end: Location):       
+                   
+                
+        #def h(start: Location, end: Location):
+        #   return abs((start.col - end.col) + (start.row - end.row))
+
+      
+        open_list = []  # @TODO: needs proper declaration. 
+
         closed_list = [] # @TODO: needs proper declaration. Is it a list or a set?
+
+        parent_list = [] # (child, parent)
 
         current_node = (start, 0)
         open_list.append(current_node)
 
         while len(open_list) > 0:
 
-            if current_node[0] == end:
-                break
-                
-            current_node = min(open_list, key = lambda t: t[1])
-            closed_list.add(current_node)
-            open_list.remove(current_node)
+            current_node = open_list[0]
+            for item in open_list:
+                if item[1] < current_node[1]:
+                    current_node = item
 
-            for child in current_node[0].neighbors():
+            open_list.remove(current_node)
+            closed_list.append(current_node)
+
+            if current_node[0] == end:
+
+                path = []
+                current = current_node[0]
+                while current is not start:
+                    path.append(current)
+                    current = [node for node in parent_list if node[0] == current][0][1]
+
+                path.append(start)
+                return path[::-1]
                 
-                if child in closed_list:
+            for child in current_node[0].neighbors:  
+
+                parent_list.append((child, current_node[0]))          
+
+                if child in [i[0] for i in closed_list]:
                     continue
 
                 if child.is_wall:
+                    print('Path: {}'.format('WALL ALERT! retard'), file=sys.stderr, flush=True)
                     continue
                     
-                child_h = h(child, end)
+                child_h = abs(child.col - end.col) + abs(child.row - end.row)
                 child_g = current_node[1] - child_h + 1
                 child_f = child_h + child_g
                 
-                if child in open_list and child_f > [node[0] for node in open_list if node[0] == child]:
+                if child in [i[0] for i in open_list] and child_f > [node for node in open_list if node[0] == child][0][1]:
                     continue
                 
                 open_list.append((child, child_f))
 
-        return closed_list
+
 
     def generate_move(self, path: '[tuple, ....]') -> '[Actions, ...]':
         """Generate actions based on given locations.
