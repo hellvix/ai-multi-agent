@@ -139,31 +139,31 @@ class Controller(object):
 
         for yval in range(len(y) - 1):
 
-            if y[yval + 1] > y[yval]:
+            if y[yval + 1] == y[yval] + 1:
                 path_y.append([MoveS, ])
 
-            elif y[yval + 1] < y[yval]:
+            elif y[yval + 1] == y[yval] - 1:
                 path_y.append([MoveN, ])
 
             elif y[yval + 1] == y[yval]:
-                path_y.append('same y')
+                path_y.append(['same y', ])
 
             else:
-                pass
+                raise Exception('Typo error: Agent cannot move 2 steps in y (rows) !')
 
         for xval in range(len(x) - 1):
 
-            if x[xval + 1] > x[xval]:
+            if x[xval + 1] == x[xval] + 1:
                 path_x.append([MoveE, ])
 
-            elif x[xval + 1] < x[xval]:
+            elif x[xval + 1] == x[xval] - 1:
                 path_x.append([MoveW, ])
 
             elif x[xval + 1] == x[xval]:
-                path_x.append('same x')
+                path_x.append(['same x', ])
 
             else:
-                pass
+                raise Exception('Typo error: Agent cannot move 2 steps in x (columns) !')
 
         for i in path_y:
 
