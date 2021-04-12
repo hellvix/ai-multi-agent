@@ -139,38 +139,47 @@ class Controller(object):
 
         for yval in range(len(y) - 1):
 
-            if y[yval + 1] > y[yval]:
+            if y[yval + 1] == y[yval] + 1:
                 path_y.append([MoveS, ])
 
-            elif y[yval + 1] < y[yval]:
+            elif y[yval + 1] == y[yval] - 1:
                 path_y.append([MoveN, ])
 
             elif y[yval + 1] == y[yval]:
-                path_y.append('same y')
+                path_y.append(['same y'])
 
             else:
-                pass
+                raise Exception('Typo error: Agent cannot move 2 steps in y (rows) !')
 
         for xval in range(len(x) - 1):
 
-            if x[xval + 1] > x[xval]:
+            if x[xval + 1] == x[xval] + 1:
                 path_x.append([MoveE, ])
 
-            elif x[xval + 1] < x[xval]:
+            elif x[xval + 1] == x[xval] - 1:
                 path_x.append([MoveW, ])
 
             elif x[xval + 1] == x[xval]:
-                path_x.append('same x')
+                path_x.append(['same x'])
 
             else:
+                raise Exception('Typo error: Agent cannot move 2 steps in x (columns) !')
+
+        for i, j in zip(path_y, path_x):
+
+            if i == ['same y'] and j != ['same x']:
+                index=path_y.index(i)
+                index2=path_x.index(j)
+                path_y[index]=path_x[index2]
+
+            elif i == ['same y'] and j == ['same x']:
+                index=path_y.index(i)
+                path_y[index]=([NoOp, ])
+
+            elif i != ['same y'] and j == ['same x']:
                 pass
 
-        for i in path_y:
-
-            if i == 'same y':
-                index = path_y.index(i)
-                path_y[index] = path_x[index]
             else:
-                pass
+                raise Exception('Typo error: Agent cannot move diagonally / in both directions !')
 
         return path_y
