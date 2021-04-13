@@ -112,9 +112,6 @@ class Client(object):
 
     @staticmethod
     def boot_up() -> None:
-        # Use stderr to print to the console.
-        print('Client initializing. I am sending this using the error output stream.', file=sys.stderr, flush=True)
-        
         # Send client name to server.
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding='ASCII')
@@ -142,6 +139,6 @@ class Client(object):
             print('Found solution of length {}.'.format(len(plan)), file=sys.stderr, flush=True)
             
             for joint_action in plan:
-                print(";".join(a.name_ for a in joint_action), flush=True)
+                print("|".join(a.name_ for a in joint_action), flush=True)
                 # We must read the server's response to not fill up the stdin buffer and block the server.
                 response = server_messages.readline()

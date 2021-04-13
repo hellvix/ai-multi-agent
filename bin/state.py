@@ -13,6 +13,8 @@ class State(object):
 
         self.__gl_reach = len(goals)  # Number of unreached goals
         
+        self._hash = None
+        
     def __hash__(self):
         if self._hash is None:
             prime = 31

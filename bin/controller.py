@@ -13,6 +13,7 @@ globals().update(Action.__members__)
 
 class Controller(object):
     def __init__(self, configuration: Configuration):
+        print('Controller initialized.', file=sys.stderr, flush=True)
         self.__parse_config__(configuration)
     
     def __parse_config__(self, configuration: Configuration):
@@ -25,27 +26,19 @@ class Controller(object):
         pass
     
     def deploy(self) -> [Action, ...]:
-        if self.__strategy == RaceType.AGENTS:
-            _plan = []
-            
-            for a in self.__agents:
-                g = self.goals_for_agent(a)
+        print('Solving level...', file=sys.stderr, flush=True)
 
-                if g: # This type of map only has one goal per agent
-                    g = g[0]
-                    _plan.extend(self.generate_move(self.find_path(a.location, g)))
-                else:
-                    _plan.extend([])
-
-            return [
-                [p] for p in _plan
-            ]
-
-        elif self.__strategy == RaceType.BOXES:
-            pass
-        else:
-            raise Exception("Cannot apply strategy to this level.")
+        for a, goals in self.goals_for_agents().items():
+            if goals:
+                print(goals, file=sys.stderr, flush=True)
         
+        return [
+            [Action.MoveE, Action.MoveE],
+        ]
+
+    def goals_for_agents(self) -> [Location, ...]:
+        return {a: self.goals_for_agent(a) for a in self.__agents}
+
     def goals_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
 
@@ -63,27 +56,25 @@ class Controller(object):
         for row in self.__level.layout:
             for loc in row:
                 
-                # If the location exists in the list with goals
-                # we append it to _goals
-                try:
-                    goal = self.__goals[loc]
-                    
-                    if goal.color == agent.color:
-                        # Race
-                        if '0' <= goal.identifier <= '9':
-                            if goal.identifier == agent.identifier:
-                                _goals.append(goal.location)
-                        # Boxes
-                        else:
-                            _goals.append(goal.location)
+                if not loc.is_wall:
+                    # If the location exists in the list with goals
+                    # we append it to _goals
+                    try:
+                        goal = self.__goals[loc]
                         
-                except KeyError:
-                    # Will fail if the location is not a goal
-                    pass
+                        if goal.color == agent.color:
+                            # Race
+                            if '0' <= goal.identifier <= '9':
+                                if goal.identifier == agent.identifier:
+                                    _goals.append(goal.location)
+                            # Boxes
+                            else:
+                                _goals.append(goal.location)
+                            
+                    except KeyError:
+                        # Will fail if the location is not a goal
+                        pass
         
-        # if not _goals:
-        #     raise Exception('Agent %s does not have a goal.' % agent)
-    
         return _goals
 
     def find_path(self, start: Location, end: Location):

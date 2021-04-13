@@ -1,6 +1,5 @@
 import sys
 import heapq
-import numpy as np
 from location import Location
 
 
