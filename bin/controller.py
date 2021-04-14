@@ -1,11 +1,16 @@
 import sys
 
+from queue import PriorityQueue
+
 from state import State
 from color import Color
 from agent import Agent
 from action import Action
 from location import Location
 from configuration import Configuration, RaceType
+from desire import DesireType
+
+from itertools import groupby
 
 
 globals().update(Action.__members__)
@@ -21,27 +26,100 @@ class Controller(object):
         """
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
         self.__strategy = configuration.race_type
-                
-    def __spawn_state__(self):
-        pass
+                   
+    def define_initial_goals(self):
+        # Define initial goal for the agents
+        # Based on these goals, the agents are going to update their desire
+
+        for agent in self.__agents:
+            agent.goals = self.goals_for_agent(agent)
+            
+    def is_plan_solid(self, agent: Agent, plan: [Location, ...]):
+        """Check whether a given plan is achievable for the given agent
+        """
+
+        # Check the position of all agents, ignoring the one making the plan
+        agent_locs = set(agt.location for agt in self.__agents if agent != agt)
+        box_locs = set(box.location for box in self.__boxes if box.color != agent.color)
+        
+        for loc in plan:
+            # Check if the location is a wall (shouldn't be, but dobble checking)
+            if loc.is_wall:
+                return False
+
+            # Check if there is something in the way
+            if loc in agent_locs or loc in box_locs:
+                return False
+
+        return True
     
+    def planner(self):
+        # Assign plan for agents
+        agents = self.__agents
+
+        # @TODO: Improve which agent gets picked up first
+        # @TODO: Allow parallelism between agent actions
+        for agent in agents:
+            
+            if agent.desire_type == DesireType.MOVE_TO_GOAL:
+                destionation = agent.desire.location
+                plan = self.find_path(agent.location, destionation)
+
+                if self.is_plan_solid(agent, plan):
+                    actions = self.generate_move(plan)
+                    act_sz = len(actions)
+
+                    # Allow the agent to execute its plan
+                    agent.move(destionation)
+                    agent.update_master_plan(actions)
+                    
+                    # Update other agents' master_plan
+                    # Make them wait
+                    # @TODO: Improve. What to do while one agent is fulfilling its desire?
+                    for other_agt in agents:
+                        if other_agt != agent:
+                            other_agt.update_master_plan(
+                                [Action.NoOp for _ in range(act_sz)]
+                            )
+                    
+    def assemble_solution(self) -> [Action, ...]:
+        """Gather agents actions
+
+        Returns:
+            [Action, ...]: Agent actions
+        """
+        
+        acts_sz = len(self.__agents[0].master_plan)  # number of actions
+        f_plan = [[] for _ in range(acts_sz)]
+        
+        # Sanity check (plans must have the same length)
+        sizes = [len(agent.master_plan) for agent in self.__agents]  # Size of all actions
+        gsiz = groupby(sizes)
+        
+        if next(gsiz, True) and next(gsiz, False):
+            raise Exception('Size in list of Actions for agents differ.')
+        
+        for action in range(acts_sz):
+            for agent in self.__agents:
+                f_plan[action].append(agent.master_plan[action])
+        
+        return f_plan
+
     def deploy(self) -> [Action, ...]:
         print('Solving level...', file=sys.stderr, flush=True)
-
-        for a, goals in self.goals_for_agents().items():
-            if goals:
-                print(goals, file=sys.stderr, flush=True)
         
-        return [
-            [Action.MoveE, Action.MoveE],
-        ]
+        # Code goes here
+        self.define_initial_goals()
+        self.planner()
+        
+        return self.assemble_solution()
 
     def goals_for_agents(self) -> [Location, ...]:
         return {a: self.goals_for_agent(a) for a in self.__agents}
 
     def goals_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
-
+        
         Args:
             agent (Agent): the agent
 
@@ -51,7 +129,7 @@ class Controller(object):
         Returns:
             [Location, ...]: List of location objects
         """
-        _goals = []
+        _goals = PriorityQueue()
         
         for row in self.__level.layout:
             for loc in row:
@@ -66,10 +144,12 @@ class Controller(object):
                             # Race
                             if '0' <= goal.identifier <= '9':
                                 if goal.identifier == agent.identifier:
-                                    _goals.append(goal.location)
+                                    _goals.put((1, goal))
                             # Boxes
                             else:
-                                _goals.append(goal.location)
+                                # @TODO: function to calculate distance from agent to goal
+                                # So it is sorted by the distance, therefore creating a priority
+                                _goals.put((1, goal))
                             
                     except KeyError:
                         # Will fail if the location is not a goal

@@ -23,6 +23,12 @@ class Goal(object):
             self.__location
         )
     
+    def __eq__(self, other):
+        return self.location == other.location
+    
+    def __le__(self, other):
+        return self.identifier < self.identifier
+    
     @property
     def location(self):
         return self.__location
