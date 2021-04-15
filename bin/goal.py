@@ -9,7 +9,7 @@ class Goal(object):
         
     def __hash__(self):
         if self._hash is None:
-            prime = 31
+            prime = 29
             _hash = 1
             _hash = _hash * prime + hash(self.__str__())
             _hash = _hash * prime + hash(tuple((self.__location.row, self.__location.col)))

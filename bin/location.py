@@ -1,15 +1,18 @@
-import sys
-import heapq
 from actor import Actor
 
 
 class Location(object):
+    __pos_row = None  # col
+    __pos_col = None  # row
+    __neighbors = None
+    is_wall = None
+    _hash = None
+    
     def __init__(self, row: int, col: int):
         self.__pos_row = row  # col
         self.__pos_col = col  # row
         self.__neighbors = None
         self.is_wall = None
-
         self._hash = None
 
     def __hash__(self):
@@ -17,7 +20,7 @@ class Location(object):
             prime = 31
             _hash = 1
             _hash = _hash * prime + hash(self.__str__())
-            _hash = _hash * prime + hash(tuple((self.__pos_row, self.__pos_col)))
+            _hash = _hash * prime + hash((self.__pos_row, self.__pos_col))
             self._hash = _hash
         return self._hash
 
@@ -35,6 +38,9 @@ class Location(object):
             raise Exception(
                 'Cannot compare Location with %s.' % type(value)
             )
+        
+        if self.is_wall != value.is_wall:
+            return False
         
         if (self.row != value.row) or (self.col != value.col):
             return False

@@ -1,4 +1,6 @@
 import sys
+import time
+import memory
 
 from queue import PriorityQueue
 
@@ -7,10 +9,12 @@ from color import Color
 from agent import Agent
 from action import Action
 from location import Location
-from configuration import Configuration, RaceType
 from desire import DesireType
+from configuration import Configuration, RaceType
 
 from itertools import groupby
+
+import numpy as np
 
 
 globals().update(Action.__members__)
@@ -27,14 +31,14 @@ class Controller(object):
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
         self.__strategy = configuration.race_type
                    
-    def define_initial_goals(self):
+    def __define_initial_goals(self):
         # Define initial goal for the agents
         # Based on these goals, the agents are going to update their desire
 
         for agent in self.__agents:
-            agent.goals = self.goals_for_agent(agent)
+            agent.goals = self.__goals_for_agent(agent)
             
-    def is_plan_solid(self, agent: Agent, plan: [Location, ...]):
+    def __is_plan_solid(self, agent: Agent, plan: [Location, ...]):
         """Check whether a given plan is achievable for the given agent
         """
 
@@ -53,7 +57,94 @@ class Controller(object):
 
         return True
     
-    def planner(self):
+    def __parse_level(self, plan: [Location, ...]):
+        """Modify the level according to the plan.
+        
+        We blur out any location that:
+            1) is not in the plan;
+            2) is not is a neighbor location in the plan;
+            3) is not a wall.
+            
+        The reason for this is to give the search a sub-set of the level,
+        so the search space is reduced. The reason not to blurry everything but the plan
+        is that we want to ensure the agent has enough space to manouver in case this is necessary.
+        
+        Example with path from [L1,2, L2,2, L2,3] (0-based indexes):
+        
+        [x, x, x, x, x, x]
+        [x, -, -, -, x, x]
+        [-, -, -, -, -, x]
+        [x, -, -, -, x, x]
+        [x, x, x, x, x, x]
+        
+        x == blurred
+        
+        At this point we assume the plan given is achievable (__is_plan_solid was called).
+        
+
+        Args:
+            plan ([Location, ...]): plan leading from one location to another.
+        """
+        _level = self.__level.clone()
+        all_neighbors = set(loc for loc in plan for loc in loc.neighbors)
+
+        for row in _level.layout:
+            for loc in row:
+                # Location is not:
+                # 1) in the plan;
+                # 2) is a neighbor location in the plan;
+                # 3) is not already a wall.
+                if not loc in plan and not loc in all_neighbors and not loc.is_wall:
+                    loc.is_wall = True
+
+        return _level
+    
+    def __generate_plan(self, agent: Agent):
+        """Generate a plan for the agent.
+        """
+        
+        start_time = time.perf_counter()        
+        frontier = PriorityQueue()
+        iterations = 0
+        # frontier = set of all leaf nodes available for expansion
+        frontier.add(State(self.__level, agent))
+        explored = np.array([])
+
+        while True:
+
+            iterations += 1
+            if iterations % 10000 == 0:
+                memory.print_search_status(explored, frontier)
+
+            if memory.get_usage() > memory.max_usage:
+                print_search_status(explored, frontier)
+                print('Maximum memory usage exceeded.', file=sys.stderr, flush=True)
+                return None
+
+            # if the frontier is empty then return failure
+            if frontier.is_empty():
+                return None
+
+            # choose a leaf node and remove it from the frontier
+            state = frontier.pop()
+
+            # if the node contains a goal state then return the corresponding solution
+            if state.is_goal_state():
+                return state.extract_plan()
+
+            # add the node to the explored set
+            explored.add(state)
+
+            # expand the chosen node, adding the resulting nodes to the frontier
+            # only if not in the frontier or explored set
+            expanded = state.get_expanded_states()
+
+            for n in expanded:
+                if not (frontier.contains(n) or n in explored):
+                    frontier.add(n)
+        
+    
+    def __planner(self):
         # Assign plan for agents
         agents = self.__agents
 
@@ -62,19 +153,22 @@ class Controller(object):
         for agent in agents:
             
             if agent.desire_type == DesireType.MOVE_TO_GOAL:
-                destionation = agent.desire.location
-                plan = self.find_path(agent.location, destionation)
+                destination = agent.desire.location
+                plan = self.__find_path(agent.location, destination)
 
-                if self.is_plan_solid(agent, plan):
-                    actions = self.generate_move(plan)
+                if self.__is_plan_solid(agent, plan):
+                    actions = self.__generate_move(plan)
                     act_sz = len(actions)
+                    
+                    # @TODO: CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    self.__parse_level(plan)
 
                     # Allow the agent to execute its plan
-                    agent.move(destionation)
+                    agent.move(destination)
                     agent.update_master_plan(actions)
                     
-                    # Update other agents' master_plan
-                    # Make them wait
+                    # Update other agents' master_plan by making them wait
+                    # @TODO: If no conflict, then agents can perform things in parallel
                     # @TODO: Improve. What to do while one agent is fulfilling its desire?
                     for other_agt in agents:
                         if other_agt != agent:
@@ -82,7 +176,7 @@ class Controller(object):
                                 [Action.NoOp for _ in range(act_sz)]
                             )
                     
-    def assemble_solution(self) -> [Action, ...]:
+    def __assemble(self) -> [Action, ...]:
         """Gather agents actions
 
         Returns:
@@ -109,15 +203,15 @@ class Controller(object):
         print('Solving level...', file=sys.stderr, flush=True)
         
         # Code goes here
-        self.define_initial_goals()
-        self.planner()
+        self.__define_initial_goals()
+        self.__planner()
         
-        return self.assemble_solution()
+        return self.__assemble()
 
-    def goals_for_agents(self) -> [Location, ...]:
-        return {a: self.goals_for_agent(a) for a in self.__agents}
+    def __goals_for_agents(self) -> [Location, ...]:
+        return {a: self.__goals_for_agent(a) for a in self.__agents}
 
-    def goals_for_agent(self, agent: Agent) -> [Location, ...]:
+    def __goals_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
         
         Args:
@@ -157,7 +251,7 @@ class Controller(object):
         
         return _goals
 
-    def find_path(self, start: Location, end: Location):
+    def __find_path(self, start: Location, end: Location):
         """ Shanna's implementatoin of A*.
         Finds the shorted path from A to B.
         
@@ -218,7 +312,7 @@ class Controller(object):
                 
                 open_list.append((child, child_f))
 
-    def generate_move(self, path: '[Location, ...]') -> '[Actions, ...]':
+    def __generate_move(self, path: '[Location, ...]') -> '[Actions, ...]':
         """Generate actions based on given locations.
 
         Author: dimos

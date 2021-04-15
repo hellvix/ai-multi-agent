@@ -30,7 +30,7 @@ class Agent(Actor):
     
     def __hash__(self):
         if self._hash is None:
-            prime = 31
+            prime = 41
             _hash = 1
             _hash = _hash * prime + hash(self.__str__())
             _hash = _hash * prime + hash(self.__goals)

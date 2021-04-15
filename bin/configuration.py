@@ -132,7 +132,7 @@ class Configuration(object):
         #
         layout = np.array([
             [Location(row, col) for col in range(1, col_cnt - 1)] for row in range(1, row_cnt - 1)
-        ])
+        ], dtype=object)
 
         # for each row
         for entries in layout:

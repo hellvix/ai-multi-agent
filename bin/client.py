@@ -103,13 +103,6 @@ class Client(object):
             'goals': goals
         })
 
-    
-    @staticmethod
-    def print_search_status(start_time: 'int', explored: '{State, ...}', frontier: 'Frontier') -> None:
-        status_template = '#Expanded: {:8,}, #Frontier: {:8,}, #Generated: {:8,}, Time: {:3.3f} s\n[Alloc: {:4.2f} MB, MaxAlloc: {:4.2f} MB]'
-        elapsed_time = time.perf_counter() - start_time
-        print(status_template.format(len(explored), frontier.size(), len(explored) + frontier.size(), elapsed_time, memory.get_usage(), memory.max_usage), file=sys.stderr, flush=True)
-
     @staticmethod
     def boot_up() -> None:
         # Send client name to server.

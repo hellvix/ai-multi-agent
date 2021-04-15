@@ -25,21 +25,10 @@ class Actor(metaclass=ABCMeta):
 
         return True
     
-    def __hash__(self):
-        if self._hash is None:
-            prime = 31
-            _hash = 1
-            _hash = _hash * prime + hash(self.__str__())
-            _hash = _hash * prime + hash(tuple((self.__location.row, self.__location.col)))
-            self._hash = _hash
-        return self._hash
+    def __hash__(self): raise NotImplementedError
 
     def __repr__(self):
         return self.__str__()
-    
-    @property
-    def id(self):
-        return self.__identifier
 
     @abstractmethod
     def __actor_type__(self): raise NotImplementedError

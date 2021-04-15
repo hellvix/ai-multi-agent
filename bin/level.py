@@ -1,5 +1,7 @@
-import sys
-import heapq
+import numpy as np
+
+from copy import deepcopy
+
 from location import Location
 
 
@@ -8,7 +10,7 @@ class Level(object):
     Defines locations as a a set of locations, together with its neighbors.
     """
 
-    def __init__(self, layout: list, num_rows: int, num_cols: int):
+    def __init__(self, layout: '[[Location, ...], ...]', num_rows: int, num_cols: int):
         # Representation of the level in Location objects, ignoring outside walls.
         # This means row 1 in the level is actually located in row 0 in this array.
         # [
@@ -18,15 +20,22 @@ class Level(object):
 
         self.__layout = layout
         self.__num_rows = num_rows  # Total number of rows (counting outside walls)
-        self.__num_cols = num_cols  # Total number of cols (counting outside walls)
+        self.__num_cols = num_cols  # Total number of cols (counting outside walls)        
+        self._hash = None
         
     def __hash__(self):
         if self._hash is None:
-            prime = 31
+            prime = 37
             _hash = 1
-            _hash = _hash * prime + hash(tuple(self.__layout))
+            _hash = _hash * prime + hash(tuple(tuple(row) for row in self.__layout))
+            _hash = _hash * prime + hash((self.__num_rows, self.__num_cols))
             self._hash = _hash
         return self._hash
+    
+    def clone(self):
+        """Return a deep copy of the object
+        """
+        return deepcopy(self)
         
     @property
     def layout(self):
