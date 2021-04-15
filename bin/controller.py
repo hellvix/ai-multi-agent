@@ -58,7 +58,7 @@ class Controller(object):
         return True
     
     def __parse_level(self, plan: [Location, ...]):
-        """Modify the level according to the plan.
+        """Copy and modify the level according to the plan.
         
         We blur out any location that:
             1) is not in the plan;
@@ -81,9 +81,11 @@ class Controller(object):
         
         At this point we assume the plan given is achievable (__is_plan_solid was called).
         
-
         Args:
-            plan ([Location, ...]): plan leading from one location to another.
+            plan ([Location, ...]): List of locations leading from point A to B.
+            
+        Returns:
+            (Level): modified copy of the given level.
         """
         _level = self.__level.clone()
         all_neighbors = set(loc for loc in plan for loc in loc.neighbors)
