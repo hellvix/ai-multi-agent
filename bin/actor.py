@@ -3,10 +3,18 @@ from abc import ABCMeta, abstractmethod
 
 
 class Actor(metaclass=ABCMeta):
+    __identifier = None
+    __location = None
+    __color = None
+    _hash = None
+
     def __init__(self, identifier: str, location: 'Location', color: Color):
         self.__identifier = identifier
         self.__location = location
         self.__color = color
+        self._hash
+        
+    def __hash__(self): raise NotImplementedError
 
     def __str__(self):
         return '{}{} ({}) @{}'.format(

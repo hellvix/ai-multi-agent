@@ -1,5 +1,3 @@
-from queue import PriorityQueue
-
 from goal import Goal
 from actor import Actor
 from action import Action
@@ -9,11 +7,14 @@ from desire import Desire, DesireType
 class Agent(Actor):
     
     def __init__(self, *args, **kwargs):
-        self.__goals = PriorityQueue  # Goal objects
+        self.__goals = set()  # Goal objects
         super().__init__(*args, **kwargs)
         
         self.__desire = None
-        self.__master_plan = []  # Locations
+        # Current plan. Can either be discarded or be added to master plan
+        self.__current_plan = None
+        # The set of actions leading to the completion of the level
+        self.__actions = []
         
         # Object properties
         self._hash = None
@@ -33,7 +34,7 @@ class Agent(Actor):
             prime = 41
             _hash = 1
             _hash = _hash * prime + hash(self.__str__())
-            _hash = _hash * prime + hash(self.__goals)
+            _hash = _hash * prime + hash(tuple(goal for goal in self.__goals))
             _hash = _hash * prime + hash(tuple((self.location.row, self.location.col)))
             self._hash = _hash
         return self._hash
@@ -46,37 +47,48 @@ class Agent(Actor):
         Returns:
             tuple: (distance, Goal)
         """
-        return self.__goals.get()
+        return self.__goals.pop()
     
     def add_goal(self, distance: int, goal: Goal):
-        self.__goals.put(distance, goal)
+        self.__goals.add(goal)
         
     @property
-    def master_plan(self):
-        return self.__master_plan
+    def current_plan(self):
+        return self.__current_plan
     
-    def update_master_plan(self, plan):
-        if isinstance(plan, list):
-            self.__master_plan.extend(plan)
-
-        if isinstance(plan, Action):
-            self.__master_plan.append(plan)
+    def update_plan(self, plan: [Location, ...]):
+        if not isinstance(plan[0], Location):
+            raise Exception('The agent plan must be a list of Locations, not %s.' % type(plan[0]))
+        self.__current_plan = plan
+        
+    @property
+    def actions(self):
+        return self.__actions
+    
+    def derive_actions(self):
+        """Derive move actions from current plan.
+        """
+        from controller import Controller
+        return Controller.generate_move(self.current_plan)
+    
+    def update_actions(self, actions: [Action, ...]):
+        self.__actions.extend(actions)
     
     def add_goal(self, goal: tuple):
-        return self.__goals.put(goal)
+        return self.__goals.add(goal)
         
     @property
-    def goals(self) -> PriorityQueue:
+    def goals(self) -> set:
         return self.__goals
     
     @goals.setter
-    def goals(self, goals: PriorityQueue):
+    def goals(self, goals: set):
         # When we set new goals we update the desire
         self.__goals = goals
         self._update_desire()
 
     def _has_goals(self) -> bool:
-        return not self.__goals.empty()
+        return not self.__goals == set()
     
     @property
     def desire(self):
@@ -92,14 +104,8 @@ class Agent(Actor):
         else:
             self.__desire = Desire(
                 DesireType.MOVE_TO_GOAL,
-                self._get_goal()[1].location
+                self._get_goal().location
             )
-            
-    def receive_plan(self, plan: [Location, ...]):
-        if not self.__desire:
-            raise Exception('Agent does not have a desire.')
-
-        self.__desire.plan = plan
         
     def move(self, location: Location):
         super().move(location)

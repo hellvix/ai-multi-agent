@@ -9,7 +9,7 @@ from enum import Enum, unique
 
 
 @unique
-class RaceType(Enum):
+class StrategyType(Enum):
     BOXES = 0
     AGENTS = 1
 
@@ -18,7 +18,7 @@ class Configuration(object):
     def __init__(self, raw_data: dict):
         
         # Configuration type: only agents? boxes?
-        self.__type = RaceType.AGENTS
+        self.__type = StrategyType.AGENTS
         
         # Walls
         self.__raw_walls = raw_data['walls']
@@ -40,7 +40,7 @@ class Configuration(object):
         """The type of challenge we are dealing with.
 
         Returns:
-            RaceType: type of level (boxes or agents)
+            StrategyType: type of level (boxes or agents)
         """
         return self.__type
     
@@ -112,9 +112,6 @@ class Configuration(object):
                     b_color = _box_colors[c_box]
                     b_loc = level.get_location((row, col), translate=True)
                     _boxes = np.append(_boxes, Box(p_box, b_loc, b_color))
-        
-        # Change configuration type
-        if _boxes.any(): self.__type = RaceType.BOXES
 
         return _boxes
         
@@ -133,7 +130,7 @@ class Configuration(object):
         layout = np.array([
             [Location(row, col) for col in range(1, col_cnt - 1)] for row in range(1, row_cnt - 1)
         ], dtype=object)
-
+        
         # for each row
         for entries in layout:
             # for loc in each col
@@ -168,5 +165,28 @@ class Configuration(object):
         __agents = self.__build_agents(__level)
         __boxes = self.__build_boxes(__level)
         __goals = self.__build_goals(__level)
+        self.__type = self.__get_race_type(__agents, __boxes, __goals)
         
         return __level, __agents, __boxes, __goals
+    
+    def __get_race_type(self, agents: [Agent, ...], boxes: [Box, ...], goals: [Goal, ...]):
+        # Change configuration type
+        if not boxes.any():
+            return StrategyType.AGENTS
+
+        all_goals = set(str(g.identifier) for loc, g in goals.items())
+        
+        for b in boxes:
+            if b.identifier in all_goals:
+                return StrategyType.BOXES
+            
+        for a in agents:
+            if a.identifier in all_goals:
+                return StrategyType.AGENTS
+        
+        # If reached here, we do not know the type of strategy to use
+        raise Exception(
+            'Could not identify level. '
+            'This is mostly because this algorithm was '
+            'not designed for this type level configuration.'
+        )

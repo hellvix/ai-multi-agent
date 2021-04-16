@@ -3,6 +3,7 @@ import numpy as np
 from copy import deepcopy
 
 from location import Location
+from action import Action, ActionType
 
 
 class Level(object):
@@ -67,11 +68,12 @@ class Level(object):
         """
         return self.num_cols - 2
     
-    def get_location(self, coordinates: tuple, translate=False) -> Location:
-        """Given the coordinates (matrix indexes), which object location is at this position?
-        Important: the layout vector is 0-indexed, this means L1,1 is located at position [0][0]
+    def get_location(self, indexes: tuple, translate=False) -> Location:
+        """Given the coordinates (row, col), which object location is at this position?
+        Important: the layout vector is 0-indexed, this means L1,1 is located in [0][0]
+        and L2,3 is located in [1][2]
         
-        If translate is True, then the coordinates are converted to 0-based indexes.
+        If translate is True, then the indexes are converted to 0-based indexes.
 
         Args:
             coordinates (tuple): (row, col)
@@ -80,11 +82,62 @@ class Level(object):
         Returns:
             Location: object at this index
         """
-        row, col = coordinates
+        row, col = indexes
         try:
             if translate:
                 row = row - 1
                 col = col - 1
+            
+            if 0 > row or row > self.real_num_rows:
+                raise Exception(
+                    "Invalid row index row %d. Maybe use parameter translate?" % row
+                )
+                
+            if 0 > col or col > self.real_num_cols:
+                raise Exception(
+                    "Invalid row index col %d. Maybe use parameter translate?" % col
+                )
+            
             return self.__layout[row][col]
         except IndexError:
-            raise Exception("Coordinates do not exist.")
+            raise Exception(
+                "Location in row %d col %d do not exist. Maybe use parameter translate?" % (row, col)
+            )
+        
+    def location_from_action(self, location: Location, action: Action):
+        """If we apply an action in a specific location, which locations do we get in return?
+
+        Args:
+            location (Location): location we apply the action to
+            action (Action): Move, Pull or Push
+            
+        Returns:
+            Location(s): if action is either Push or Pull, 
+            we return Tuple(Agent Location, Box Location), otherwise Agent Location
+        """
+        
+        _arow = location.row + action.agent_row_delta # Y
+        _acol = location.col + action.agent_col_delta # x
+        _apos = None
+        _bpos = None
+
+        if action.type is ActionType.Move:
+            return self.get_location((_arow, _acol), translate=True)
+
+        elif action.type in (ActionType.Pull, ActionType.Push):
+            _brow = _arow + action.box_row_delta
+            _bcol = _acol + action.box_col_delta
+            
+            try:
+                _apos = self.get_location((_arow, _acol), translate=True)  # Agent position
+            except Exception:
+                pass
+
+            try:
+                _bpos = self.get_location((_brow, _bcol), translate=True)   # Box position
+            except Exception:
+                pass
+            
+            return _apos, _bpos
+        else:
+            raise Exception('Could not define location.')

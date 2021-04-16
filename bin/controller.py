@@ -4,13 +4,16 @@ import memory
 
 from queue import PriorityQueue
 
+from copy import deepcopy
+
 from state import State
 from color import Color
 from agent import Agent
+from level import Level
 from action import Action
 from location import Location
 from desire import DesireType
-from configuration import Configuration, RaceType
+from configuration import Configuration, StrategyType
 
 from itertools import groupby
 
@@ -44,7 +47,7 @@ class Controller(object):
 
         # Check the position of all agents, ignoring the one making the plan
         agent_locs = set(agt.location for agt in self.__agents if agent != agt)
-        box_locs = set(box.location for box in self.__boxes if box.color != agent.color)
+        box_locs = set(box.location for box in self.__boxes)
         
         for loc in plan:
             # Check if the location is a wall (shouldn't be, but dobble checking)
@@ -57,7 +60,7 @@ class Controller(object):
 
         return True
     
-    def __parse_level(self, plan: [Location, ...]):
+    def __adapt_level(self, plan: [[Location, ...], ...]):
         """Copy and modify the level according to the plan.
         
         We blur out any location that:
@@ -101,16 +104,16 @@ class Controller(object):
 
         return _level
     
-    def __generate_plan(self, agent: Agent):
-        """Generate a plan for the agent.
+    def __solve_conflicts(self, agents: [Agent, ], level: Level):
+        """Solve conflicts in agents' plans
         """
         
         start_time = time.perf_counter()        
         frontier = PriorityQueue()
         iterations = 0
         # frontier = set of all leaf nodes available for expansion
-        frontier.add(State(self.__level, agent))
-        explored = np.array([])
+        frontier.put((0, State(level, agents, self.__strategy)))
+        explored = set()
 
         while True:
 
@@ -124,11 +127,11 @@ class Controller(object):
                 return None
 
             # if the frontier is empty then return failure
-            if frontier.is_empty():
+            if frontier.empty():
                 return None
 
             # choose a leaf node and remove it from the frontier
-            state = frontier.pop()
+            state = frontier.get()[1]
 
             # if the node contains a goal state then return the corresponding solution
             if state.is_goal_state():
@@ -142,10 +145,9 @@ class Controller(object):
             expanded = state.get_expanded_states()
 
             for n in expanded:
-                if not (frontier.contains(n) or n in explored):
-                    frontier.add(n)
-        
-    
+                if not (n in frontier or n in explored):
+                    frontier.put(n)
+
     def __planner(self):
         # Assign plan for agents
         agents = self.__agents
@@ -153,31 +155,34 @@ class Controller(object):
         # @TODO: Improve which agent gets picked up first
         # @TODO: Allow parallelism between agent actions
         for agent in agents:
-            
             if agent.desire_type == DesireType.MOVE_TO_GOAL:
                 destination = agent.desire.location
                 plan = self.__find_path(agent.location, destination)
 
                 if self.__is_plan_solid(agent, plan):
-                    actions = self.__generate_move(plan)
-                    act_sz = len(actions)
-                    
-                    # @TODO: CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                    self.__parse_level(plan)
-
                     # Allow the agent to execute its plan
+                    agent.update_plan(plan)
+                    actions = agent.derive_actions()
+                    act_sz = len(actions)
+                    agent.update_actions(actions)
                     agent.move(destination)
-                    agent.update_master_plan(actions)
                     
-                    # Update other agents' master_plan by making them wait
+                    # Update other agents' actions by making them wait
                     # @TODO: If no conflict, then agents can perform things in parallel
                     # @TODO: Improve. What to do while one agent is fulfilling its desire?
                     for other_agt in agents:
                         if other_agt != agent:
-                            other_agt.update_master_plan(
-                                [Action.NoOp for _ in range(act_sz)]
-                            )
-                    
+                            other_agt.update_plan([Action.NoOp for _ in range(act_sz)])
+                            other_agt.update_actions()
+                else:
+                    # Conflicts
+                    # @TODO: Get a list of agents and their plans
+                    plan = self.__solve_conflicts(
+                        deepcopy(agents),
+                        self.__adapt_level(plan)
+                    )
+        return self.__assemble()
+
     def __assemble(self) -> [Action, ...]:
         """Gather agents actions
 
@@ -185,19 +190,22 @@ class Controller(object):
             [Action, ...]: Agent actions
         """
         
-        acts_sz = len(self.__agents[0].master_plan)  # number of actions
-        f_plan = [[] for _ in range(acts_sz)]
-        
         # Sanity check (plans must have the same length)
-        sizes = [len(agent.master_plan) for agent in self.__agents]  # Size of all actions
+        sizes = [len(agent.actions)
+                 for agent in self.__agents]  # Size of all actions
         gsiz = groupby(sizes)
-        
+
         if next(gsiz, True) and next(gsiz, False):
-            raise Exception('Size in list of Actions for agents differ.')
+            raise Exception(
+                'List of Actions for agents does not have the same size.'
+            )
+        
+        acts_sz = len(self.__agents[0].actions)  # number of actions
+        f_plan = [[] for _ in range(acts_sz)]
         
         for action in range(acts_sz):
             for agent in self.__agents:
-                f_plan[action].append(agent.master_plan[action])
+                f_plan[action].append(agent.actions[action])
         
         return f_plan
 
@@ -225,7 +233,7 @@ class Controller(object):
         Returns:
             [Location, ...]: List of location objects
         """
-        _goals = PriorityQueue()
+        _goals = set()
         
         for row in self.__level.layout:
             for loc in row:
@@ -240,12 +248,12 @@ class Controller(object):
                             # Race
                             if '0' <= goal.identifier <= '9':
                                 if goal.identifier == agent.identifier:
-                                    _goals.put((1, goal))
+                                    _goals.add(goal)
                             # Boxes
                             else:
                                 # @TODO: function to calculate distance from agent to goal
                                 # So it is sorted by the distance, therefore creating a priority
-                                _goals.put((1, goal))
+                                _goals.add(goal)
                             
                     except KeyError:
                         # Will fail if the location is not a goal
@@ -314,7 +322,8 @@ class Controller(object):
                 
                 open_list.append((child, child_f))
 
-    def __generate_move(self, path: '[Location, ...]') -> '[Actions, ...]':
+    @staticmethod
+    def generate_move(path: '[Location, ...]') -> '[Actions, ...]':
         """Generate actions based on given locations.
 
         Author: dimos
