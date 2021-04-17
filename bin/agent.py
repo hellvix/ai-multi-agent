@@ -11,8 +11,8 @@ class Agent(Actor):
         super().__init__(*args, **kwargs)
         
         self.__desire = None
-        # Current plan. Can either be discarded or be added to master plan
-        self.__current_plan = None
+        # Current route. Can either be discarded or be added to master route
+        self.__current_route = None
         # The set of actions leading to the completion of the level
         self.__actions = []
         
@@ -53,23 +53,23 @@ class Agent(Actor):
         self.__goals.add(goal)
         
     @property
-    def current_plan(self):
-        return self.__current_plan
+    def current_route(self):
+        return self.__current_route
     
-    def update_plan(self, plan: [Location, ...]):
-        if not isinstance(plan[0], Location):
-            raise Exception('The agent plan must be a list of Locations, not %s.' % type(plan[0]))
-        self.__current_plan = plan
+    def update_route(self, route: [Location, ...]):
+        if not isinstance(route[0], Location):
+            raise Exception('The agent route must be a list of Locations, not %s.' % type(route[0]))
+        self.__current_route = route
         
     @property
     def actions(self):
         return self.__actions
     
-    def derive_actions(self):
-        """Derive move actions from current plan.
+    def derive_move_actions(self):
+        """Derive move actions from current route.
         """
         from controller import Controller
-        return Controller.generate_move(self.current_plan)
+        return Controller.generate_move(self.current_route)
     
     def update_actions(self, actions: [Action, ...]):
         self.__actions.extend(actions)

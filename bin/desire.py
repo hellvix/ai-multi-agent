@@ -13,13 +13,13 @@ class Desire(object):
     def __init__(self, type: DesireType, location=None):
         self.__type = type
         self.location = location
-        self.plan = []  # Locations
+        self.route = []  # Locations
         
     def __str__(self):
         return '{} {} {}'.format(
             self.__type,
             self.location,
-            self.plan
+            self.route
         )
     
     @property

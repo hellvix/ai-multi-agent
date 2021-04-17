@@ -120,13 +120,21 @@ class Level(object):
         _acol = location.col + action.agent_col_delta # x
         _apos = None
         _bpos = None
-
+        
+        # Where agent will be
         if action.type is ActionType.Move:
             return self.get_location((_arow, _acol), translate=True)
 
-        elif action.type in (ActionType.Pull, ActionType.Push):
-            _brow = _arow + action.box_row_delta
-            _bcol = _acol + action.box_col_delta
+        # Box position
+        else:
+            if action.type is ActionType.Pull:
+                # The inverse of where the box is supposed to be === where the box is
+                # We want this location to know if there is a box there
+                _brow = location.row + action.box_row_delta * -1
+                _bcol = location.col + action.box_col_delta * -1
+            else:
+                _brow = _arow + action.box_row_delta
+                _bcol = _acol + action.box_col_delta
             
             try:
                 _apos = self.get_location((_arow, _acol), translate=True)  # Agent position
@@ -139,5 +147,4 @@ class Level(object):
                 pass
             
             return _apos, _bpos
-        else:
-            raise Exception('Could not define location.')
+        raise Exception('Could not define location.')

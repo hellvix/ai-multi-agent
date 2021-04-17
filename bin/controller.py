@@ -6,6 +6,7 @@ from queue import PriorityQueue
 
 from copy import deepcopy
 
+from box import Box
 from state import State
 from color import Color
 from agent import Agent
@@ -41,15 +42,15 @@ class Controller(object):
         for agent in self.__agents:
             agent.goals = self.__goals_for_agent(agent)
             
-    def __is_plan_solid(self, agent: Agent, plan: [Location, ...]):
-        """Check whether a given plan is achievable for the given agent
+    def __is_route_solid(self, agent: Agent, route: [Location, ...]):
+        """Check whether a given route is achievable for the given agent
         """
 
-        # Check the position of all agents, ignoring the one making the plan
+        # Check the position of all agents, ignoring the one making the route
         agent_locs = set(agt.location for agt in self.__agents if agent != agt)
         box_locs = set(box.location for box in self.__boxes)
         
-        for loc in plan:
+        for loc in route:
             # Check if the location is a wall (shouldn't be, but dobble checking)
             if loc.is_wall:
                 return False
@@ -60,16 +61,16 @@ class Controller(object):
 
         return True
     
-    def __adapt_level(self, plan: [[Location, ...], ...]):
-        """Copy and modify the level according to the plan.
+    def __adapt_level(self, route: [[Location, ...], ...]):
+        """Copy and modify the level according to the route.
         
         We blur out any location that:
-            1) is not in the plan;
-            2) is not is a neighbor location in the plan;
+            1) is not in the route;
+            2) is not is a neighbor location in the route;
             3) is not a wall.
             
         The reason for this is to give the search a sub-set of the level,
-        so the search space is reduced. The reason not to blurry everything but the plan
+        so the search space is reduced. The reason not to blurry everything but the route
         is that we want to ensure the agent has enough space to manouver in case this is necessary.
         
         Example with path from [L1,2, L2,2, L2,3] (0-based indexes):
@@ -82,37 +83,39 @@ class Controller(object):
         
         x == blurred
         
-        At this point we assume the plan given is achievable (__is_plan_solid was called).
+        At this point we assume the route given is achievable (__is_route_solid was called).
         
         Args:
-            plan ([Location, ...]): List of locations leading from point A to B.
+            route ([Location, ...]): List of locations leading from point A to B.
             
         Returns:
             (Level): modified copy of the given level.
         """
         _level = self.__level.clone()
-        all_neighbors = set(loc for loc in plan for loc in loc.neighbors)
-
+        # all_neighbors = set(loc for loc in route for loc in loc.neighbors)
+        agt_neighbors = set(loc for agt in self.__agents for loc in agt.location.neighbors)
+        boxes_neighbors = set(loc for box in self.__boxes for loc in box.location.neighbors)
+        
         for row in _level.layout:
             for loc in row:
                 # Location is not:
-                # 1) in the plan;
-                # 2) is a neighbor location in the plan;
+                # 1) in the route;
+                # 2) is a neighbor location in the route;
                 # 3) is not already a wall.
-                if not loc in plan and not loc in all_neighbors and not loc.is_wall:
+                if not loc in route and not loc in agt_neighbors.union(boxes_neighbors) and not loc.is_wall:
                     loc.is_wall = True
 
         return _level
     
-    def __solve_conflicts(self, agents: [Agent, ], level: Level):
-        """Solve conflicts in agents' plans
+    def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
+        """Solve conflicts in agents' routes
         """
         
         start_time = time.perf_counter()        
         frontier = PriorityQueue()
         iterations = 0
         # frontier = set of all leaf nodes available for expansion
-        frontier.put((0, State(level, agents, self.__strategy)))
+        frontier.put((0, State(level, agents, boxes, self.__strategy)))
         explored = set()
 
         while True:
@@ -135,7 +138,7 @@ class Controller(object):
 
             # if the node contains a goal state then return the corresponding solution
             if state.is_goal_state():
-                return state.extract_plan()
+                return state.extract_route()
 
             # add the node to the explored set
             explored.add(state)
@@ -149,20 +152,21 @@ class Controller(object):
                     frontier.put(n)
 
     def __planner(self):
-        # Assign plan for agents
+        # Assign route for agents
         agents = self.__agents
+        boxes = self.__boxes
 
         # @TODO: Improve which agent gets picked up first
         # @TODO: Allow parallelism between agent actions
         for agent in agents:
             if agent.desire_type == DesireType.MOVE_TO_GOAL:
                 destination = agent.desire.location
-                plan = self.__find_path(agent.location, destination)
+                route = self.__find_path(agent.location, destination)
 
-                if self.__is_plan_solid(agent, plan):
-                    # Allow the agent to execute its plan
-                    agent.update_plan(plan)
-                    actions = agent.derive_actions()
+                if self.__is_route_solid(agent, route):
+                    # Allow the agent to execute its route
+                    agent.update_route(route)
+                    actions = agent.derive_move_actions()
                     act_sz = len(actions)
                     agent.update_actions(actions)
                     agent.move(destination)
@@ -172,14 +176,15 @@ class Controller(object):
                     # @TODO: Improve. What to do while one agent is fulfilling its desire?
                     for other_agt in agents:
                         if other_agt != agent:
-                            other_agt.update_plan([Action.NoOp for _ in range(act_sz)])
+                            other_agt.update_route([Action.NoOp for _ in range(act_sz)])
                             other_agt.update_actions()
                 else:
                     # Conflicts
-                    # @TODO: Get a list of agents and their plans
-                    plan = self.__solve_conflicts(
+                    # @TODO: Get a list of agents and their routes
+                    route = self.__solve_conflicts(
+                        self.__adapt_level(route),
                         deepcopy(agents),
-                        self.__adapt_level(plan)
+                        deepcopy(boxes),
                     )
         return self.__assemble()
 
@@ -190,7 +195,7 @@ class Controller(object):
             [Action, ...]: Agent actions
         """
         
-        # Sanity check (plans must have the same length)
+        # Sanity check (routes must have the same length)
         sizes = [len(agent.actions)
                  for agent in self.__agents]  # Size of all actions
         gsiz = groupby(sizes)
@@ -201,13 +206,13 @@ class Controller(object):
             )
         
         acts_sz = len(self.__agents[0].actions)  # number of actions
-        f_plan = [[] for _ in range(acts_sz)]
+        f_route = [[] for _ in range(acts_sz)]
         
         for action in range(acts_sz):
             for agent in self.__agents:
-                f_plan[action].append(agent.actions[action])
+                f_route[action].append(agent.actions[action])
         
-        return f_plan
+        return f_route
 
     def deploy(self) -> [Action, ...]:
         print('Solving level...', file=sys.stderr, flush=True)

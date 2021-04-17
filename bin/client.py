@@ -118,20 +118,20 @@ class Client(object):
         # Client returns raw data from the server
         configuration = Client.parse_level(server_messages)
         
-        # Search for a plan.
+        # Search for a route.
         print('Initializing controller...', file=sys.stderr, flush=True)
         
         controller = Controller(configuration)
-        plan = controller.deploy()
+        route = controller.deploy()
         
-        # Print plan to server.
-        if plan is None:
+        # Print route to server.
+        if route is None:
             print('Unable to solve level.', file=sys.stderr, flush=True)
             sys.exit(0)
         else:
-            print('Found solution of length {}.'.format(len(plan)), file=sys.stderr, flush=True)
+            print('Found solution of length {}.'.format(len(route)), file=sys.stderr, flush=True)
             
-            for joint_action in plan:
+            for joint_action in route:
                 print("|".join(a.name_ for a in joint_action), flush=True)
                 # We must read the server's response to not fill up the stdin buffer and block the server.
                 response = server_messages.readline()
