@@ -39,13 +39,10 @@ class Agent(Actor):
             self._hash = _hash
         return self._hash
     
-    def _get_goal(self) -> tuple:
+    def _get_goal(self):
         """Pop the first Goal from the list.
         
         @IMPORTANT: The goal is removed from the list!
-
-        Returns:
-            tuple: (distance, Goal)
         """
         return self.__goals.pop()
     
@@ -76,6 +73,11 @@ class Agent(Actor):
     
     def add_goal(self, goal: tuple):
         return self.__goals.add(goal)
+    
+    def is_done(self):
+        if not self.desire:
+            return True
+        return self.location == self.desire.location
         
     @property
     def goals(self) -> set:
@@ -104,8 +106,9 @@ class Agent(Actor):
         else:
             self.__desire = Desire(
                 DesireType.MOVE_TO_GOAL,
-                self._get_goal().location
+                self._get_goal()
             )
+            
         
     def move(self, location: Location):
         super().move(location)

@@ -1,48 +1,154 @@
+import sys
+import numpy as np
+
+from eprint import deb
+
+from queue import PriorityQueue
+
+from copy import deepcopy
+
 from box import Box
+from goal import Goal
 from level import Level
 from agent import Agent
-from box import Box
 from color import Color
 from location import Location
 from action import Action, ActionType
 
 
 class State(object):
-    def __init__(self, level: Level, agents: Agent, boxes: Box, strategy: 'StrategyType'):
+    def __init__(self, level: Level, agents: Agent, boxes: Box):
         self.__level = level
         self.__agents = agents
         self.__boxes = boxes
-        self.__strategy = strategy
+        
+        # Attributes
+        self._joint_actions = None
         self._hash = None
+        self._parent = None
+        self._g = 0
         
     def __hash__(self):
         if self._hash is None:
             prime = 71
             _hash = 1
-            _hash = _hash * prime + hash(tuple (agt for agt in self.__agents))
-            _hash = _hash * prime + hash(self.__level)
+            _hash = _hash * prime + hash(tuple(agt for agt in self.__agents))
+            _hash = _hash * prime + hash(tuple(box for box in self.__boxes))
+            _hash = _hash * prime + self._g
             self._hash = _hash
         return self._hash
     
-    def __apply_action(self):
-        pass
+    def __eq__(self, other):
+        if self is other: return True
+        if not isinstance(other, State): return False
+        if np.array_equal(self.__agents, other.__agents): return False
+        if np.array_equal(self.__boxes, other.__boxes): return False
+        return True
     
-    def get_expanded_states(self):
-        applicable_actions = [
-            [
-                action for action in Action if self.__is_applicable(agent, action)
-            ] for agent in self.__agents
-        ]
+    def __lt__(self, other):
+        return self._g <= other._g
+    
+    def extract_actions(self) -> '[Action, ...]':
+        plan = [None for _ in range(self._g)]
+        state = self
+        while state._joint_actions is not None:
+            plan[state.g - 1] = state._joint_actions
+            state = state._parent
+        return plan
+    
+    def __apply_action(self, joint_actions: '[Action, ...]') -> 'State':
+        _state = deepcopy(self)  # Make a copy so we don't change objects in this state
         
-        print(applicable_actions)
+        def get_box_at(state, location):
+            for box in state.__boxes:
+                if box.location == location: return box
+            raise Exception('No box at location %s.' % location)
+        
+        def get_agent(state, agent):
+            for agt in state.__agents:
+                if agt == agent: return agt
+            raise Exception('Cannot find agent %s.' % agent)
+        
+        for agent, action in joint_actions.items():
+            # Get the agent and box location of the executed Action
+            original_location = self.__level.location_from_action(agent.location, action)
+            move_location = self.__level.location_from_action(agent.location, action, execute=True)
+            _agt = get_agent(_state, agent)
+            
+            if action.type == ActionType.NoOp:
+                pass
+            elif action.type == ActionType.Move:
+                _agt.move(move_location)
+            elif action.type in (ActionType.Pull, ActionType.Push):
+                if action.type is ActionType.Pull:
+                    box_loc = original_location[1]
+                    agt_mov_loc = move_location[0]
+                    box_mov_loc = move_location[1]
+                else:
+                    box_loc = original_location[0]
+                    agt_mov_loc = move_location[0]
+                    box_mov_loc = move_location[1]
+                _agt.move(agt_mov_loc)
+                _box = get_box_at(_state, box_loc)
+                _box.move(box_mov_loc)
+        
+        _state._joint_actions = joint_actions.copy()
+        _state._parent = self
+        _state._g += 1
+        # deb(_state._g)
+        return _state
+    
+    def get_expanded_states(self) -> '{State, ...}':
+        expanded_states = set()
+        
+        agents = self.__agents
+        applicable_actions = {
+            agent: [action for action in Action if self.__is_applicable(agent, action)] for agent in agents
+        }
+
+        joint_action = {agent: [] for agent in agents}
+        actions_permutation = {agent: 0 for agent in agents}
+        num_agents = len(agents)
+
+        while True:
+            for agent in agents:
+                joint_action[agent] = applicable_actions[agent][actions_permutation[agent]]
+
+            if not self.__is_conflicting(joint_action):
+                expanded_states.add(self.__apply_action(joint_action))
+
+            # Advance permutation.
+            done = False
+            _cnt = 0
+            for agent in agents:
+                if actions_permutation[agent] < len(applicable_actions[agent]) - 1:
+                    actions_permutation[agent] += 1
+                    break
+                else:
+                    actions_permutation[agent] = 0
+                    if _cnt == num_agents - 1:
+                        done = True
+                _cnt += 1
+                
+            # Last permutation?
+            if done:
+                break
+
+        return expanded_states
         
     def is_goal_state(self) -> 'bool':
-        pass
+        
+        for agt in self.__agents:
+            if not agt.is_done():
+                return False
+            
+        for box in self.__boxes:
+            if not box.is_done():
+                return False
+        
+        return True
     
     def __is_applicable(self, agent: Agent, action: 'Action') -> 'bool':
-        from configuration import StrategyType
-        
-        # @TODO: checek actions based on strategy type
         if action.type is ActionType.NoOp:
             return True
         
@@ -66,7 +172,7 @@ class State(object):
                 return False
 
     def __is_conflicting(self, joint_action: '[Action, ...]') -> 'bool':
-        pass
+        return False
     
     def __is_location_with_box(self, location: Location, color: Color):
         # Checks whether location has box of same color

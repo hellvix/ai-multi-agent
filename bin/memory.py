@@ -1,10 +1,12 @@
 import time
 import psutil
+import sys
 
 from math import inf
 
-max_usage = inf
+_max_usage = inf
 _process = psutil.Process()
+_start_time = time.perf_counter()
 
 
 def get_usage() -> 'float':
@@ -14,15 +16,15 @@ def get_usage() -> 'float':
 
 def print_search_status(explored, frontier):
     status_template = '#Expanded: {:8,}, #Frontier: {:8,}, #Generated: {:8,}, Time: {:3.3f} s\n[Alloc: {:4.2f} MB, MaxAlloc: {:4.2f} MB]'
-    elapsed_time = time.perf_counter() - start_time
+    elapsed_time = time.perf_counter() - _start_time
     print(
         status_template.format(
             len(explored),
-            frontier.size(),
-            len(explored) + frontier.size(),
+            frontier.qsize(),
+            len(explored) + frontier.qsize(),
             elapsed_time,
-            memory.get_usage(),
-            memory.max_usage
+            get_usage(),
+            _max_usage
         ),
         file=sys.stderr,
         flush=True

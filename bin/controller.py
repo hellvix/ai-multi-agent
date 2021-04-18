@@ -7,6 +7,7 @@ from queue import PriorityQueue
 from copy import deepcopy
 
 from box import Box
+from eprint import deb
 from state import State
 from color import Color
 from agent import Agent
@@ -41,6 +42,9 @@ class Controller(object):
 
         for agent in self.__agents:
             agent.goals = self.__goals_for_agent(agent)
+            
+        for box in self.__boxes:
+            box.destination = self.__destination_for_box(box)
             
     def __is_route_solid(self, agent: Agent, route: [Location, ...]):
         """Check whether a given route is achievable for the given agent
@@ -111,22 +115,21 @@ class Controller(object):
         """Solve conflicts in agents' routes
         """
         
-        start_time = time.perf_counter()        
         frontier = PriorityQueue()
         iterations = 0
         # frontier = set of all leaf nodes available for expansion
-        frontier.put((0, State(level, agents, boxes, self.__strategy)))
+        frontier.put((0, State(level, agents, boxes)))
         explored = set()
 
         while True:
 
             iterations += 1
-            if iterations % 10000 == 0:
+            if iterations % 1 == 0:
                 memory.print_search_status(explored, frontier)
 
-            if memory.get_usage() > memory.max_usage:
-                print_search_status(explored, frontier)
-                print('Maximum memory usage exceeded.', file=sys.stderr, flush=True)
+            if memory.get_usage() > memory._max_usage:
+                memory.print_search_status(explored, frontier)
+                deb('Maximum memory usage exceeded.')
                 return None
 
             # if the frontier is empty then return failure
@@ -134,11 +137,11 @@ class Controller(object):
                 return None
 
             # choose a leaf node and remove it from the frontier
-            state = frontier.get()[1]
+            rank, state = frontier.get()
 
             # if the node contains a goal state then return the corresponding solution
             if state.is_goal_state():
-                return state.extract_route()
+                return state.extract_actions()
 
             # add the node to the explored set
             explored.add(state)
@@ -148,8 +151,9 @@ class Controller(object):
             expanded = state.get_expanded_states()
 
             for n in expanded:
-                if not (n in frontier or n in explored):
-                    frontier.put(n)
+                if not (n in frontier.queue or n in explored):
+                    # @TODO: change _g from state here
+                    frontier.put((n._g, n))
 
     def __planner(self):
         # Assign route for agents
@@ -225,7 +229,7 @@ class Controller(object):
 
     def __goals_for_agents(self) -> [Location, ...]:
         return {a: self.__goals_for_agent(a) for a in self.__agents}
-
+    
     def __goals_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
         
@@ -238,33 +242,18 @@ class Controller(object):
         Returns:
             [Location, ...]: List of location objects
         """
-        _goals = set()
-        
-        for row in self.__level.layout:
-            for loc in row:
-                
-                if not loc.is_wall:
-                    # If the location exists in the list with goals
-                    # we append it to _goals
-                    try:
-                        goal = self.__goals[loc]
-                        
-                        if goal.color == agent.color:
-                            # Race
-                            if '0' <= goal.identifier <= '9':
-                                if goal.identifier == agent.identifier:
-                                    _goals.add(goal)
-                            # Boxes
-                            else:
-                                # @TODO: function to calculate distance from agent to goal
-                                # So it is sorted by the distance, therefore creating a priority
-                                _goals.add(goal)
-                            
-                    except KeyError:
-                        # Will fail if the location is not a goal
-                        pass
+        _goals = {
+            loc for loc, goal in self.__goals.items() if goal.identifier == agent.identifier
+        }
         
         return _goals
+
+    def __destination_for_box(self, box: Box) -> Location:
+        _dests = {loc for loc, goal in self.__goals.items() if goal.identifier == box.identifier}
+        
+        if _dests: return _dests.pop()
+
+        return None
 
     def __find_path(self, start: Location, end: Location):
         """ Shanna's implementatoin of A*.

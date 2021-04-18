@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 
 from copy import deepcopy
@@ -104,12 +105,13 @@ class Level(object):
                 "Location in row %d col %d do not exist. Maybe use parameter translate?" % (row, col)
             )
         
-    def location_from_action(self, location: Location, action: Action):
+    def location_from_action(self, location: Location, action: Action, execute=False):
         """If we apply an action in a specific location, which locations do we get in return?
 
         Args:
             location (Location): location we apply the action to
             action (Action): Move, Pull or Push
+            execute (bool): If true, return the location as if the action was executed
             
         Returns:
             Location(s): if action is either Push or Pull, 
@@ -121,6 +123,9 @@ class Level(object):
         _apos = None
         _bpos = None
         
+        if action.type is ActionType.NoOp:
+            return location
+        
         # Where agent will be
         if action.type is ActionType.Move:
             return self.get_location((_arow, _acol), translate=True)
@@ -128,10 +133,14 @@ class Level(object):
         # Box position
         else:
             if action.type is ActionType.Pull:
-                # The inverse of where the box is supposed to be === where the box is
-                # We want this location to know if there is a box there
-                _brow = location.row + action.box_row_delta * -1
-                _bcol = location.col + action.box_col_delta * -1
+                if not execute:
+                    # The inverse of where the box is supposed to be === where the box is
+                    # We want this location to know if there is a box there
+                    _brow = location.row + action.box_row_delta * -1
+                    _bcol = location.col + action.box_col_delta * -1
+                else:
+                    _brow = location.row
+                    _bcol = location.col
             else:
                 _brow = _arow + action.box_row_delta
                 _bcol = _acol + action.box_col_delta

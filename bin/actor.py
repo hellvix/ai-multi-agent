@@ -12,6 +12,7 @@ class Actor(metaclass=ABCMeta):
         self.__identifier = identifier
         self.__location = location
         self.__color = color
+        
         self._hash
         
     def __hash__(self): raise NotImplementedError
@@ -48,7 +49,7 @@ class Actor(metaclass=ABCMeta):
     @property
     def color(self):
         return self.__color
-    
+
     @property
     def identifier(self):
         return str(self.__identifier)
@@ -60,4 +61,8 @@ class Actor(metaclass=ABCMeta):
         Args:
             location (Location): [description]
         """
+        from location import Location
+
+        if not isinstance(location, Location):
+            raise Exception('Parameter location must be an instance of Location.')
         self.__location = location
