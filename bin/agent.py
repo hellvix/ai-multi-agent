@@ -74,7 +74,7 @@ class Agent(Actor):
     def add_goal(self, goal: tuple):
         return self.__goals.add(goal)
     
-    def is_done(self):
+    def has_reached(self):
         if not self.desire:
             return True
         return self.location == self.desire.location

@@ -1,7 +1,17 @@
 from actor import Actor
+from eprint import deb
 
 
 class Box(Actor):
+    destination = None
+    
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.destination = None
+        
+    def has_reached(self):
+        return self.location == self.destination
+    
     def __actor_type__(self):
         return 'Box'
     

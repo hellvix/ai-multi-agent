@@ -29,9 +29,10 @@ class Location(object):
 
     def __str__(self):
         # LY,X === LROW, COL
-        return "L{},{}".format(
+        return "{}{},{}".format(
+            'W' if self.is_wall else 'L',
             self.row,  # Y
-            self.col   # y
+            self.col,  # y
         )
 
     def __eq__(self, value):

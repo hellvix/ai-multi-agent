@@ -1,3 +1,5 @@
+from eprint import deb
+
 import numpy as np
 from box import Box
 from goal import Goal

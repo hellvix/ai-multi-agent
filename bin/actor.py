@@ -25,11 +25,14 @@ class Actor(metaclass=ABCMeta):
             self.__location
         )
 
-    def __eq__(self, value):
-        if self.__color != value.color:
+    def __eq__(self, other):
+        if not self.__color == other.color:
             return False
 
-        if self.identifier != value.identifier:
+        if not self.identifier == other.identifier:
+            return False
+        
+        if not self.location == other.location:
             return False
 
         return True

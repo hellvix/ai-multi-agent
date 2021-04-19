@@ -28,21 +28,30 @@ class State(object):
         self._parent = None
         self._g = 0
         
+    @property
+    def agents(self):
+        return self.__agents
+    
+    @property
+    def boxes(self):
+        return self.__boxes
+        
     def __hash__(self):
         if self._hash is None:
             prime = 71
             _hash = 1
-            _hash = _hash * prime + hash(tuple(agt for agt in self.__agents))
-            _hash = _hash * prime + hash(tuple(box for box in self.__boxes))
+            _hash = _hash * prime + hash(tuple(self.agents))
+            _hash = _hash * prime + hash(tuple(self.boxes))
             _hash = _hash * prime + self._g
             self._hash = _hash
         return self._hash
     
     def __eq__(self, other):
-        if self is other: return True
-        if not isinstance(other, State): return False
-        if np.array_equal(self.__agents, other.__agents): return False
-        if np.array_equal(self.__boxes, other.__boxes): return False
+        if not other: return False
+        if not isinstance(other, State): 
+            raise Exception('Cannot compare State with %s.' % type(other))
+        if not np.array_equal(self.agents, other.agents): return False
+        if not np.array_equal(self.boxes, other.boxes): return False
         return True
     
     def __lt__(self, other):
@@ -52,33 +61,43 @@ class State(object):
         plan = [None for _ in range(self._g)]
         state = self
         while state._joint_actions is not None:
-            plan[state.g - 1] = state._joint_actions
+            plan[state._g - 1] = state._joint_actions
             state = state._parent
         return plan
     
+    def move_box(self, rboxloc: Location, nloc: Location):
+        """Change object in deepcopy
+        """
+        for nb, _dbox in enumerate(self.__boxes):
+            if _dbox.location == rboxloc:
+                self.__boxes[nb].move(self.__level.get_location(
+                    (nloc.row, nloc.col), translate=True))
+                return self.__boxes[nb]
+        raise Exception('Cannot find box %s.' % rboxloc)
+
+    def move_agent(self, ragent: Agent, aloc: Location):
+        """Change object in deepcopy
+        """
+        # Get box in the copied state so we don't change the one we are in
+        for na, _dagt in enumerate(self.__agents):
+            if _dagt.identifier == ragent.identifier:
+                self.__agents[na].move(self.__level.get_location(
+                    (aloc.row, aloc.col), translate=True))
+                return self.__agents[na]
+        raise Exception('Cannot find agent %s.' % ragent)
+    
     def __apply_action(self, joint_actions: '[Action, ...]') -> 'State':
-        _state = deepcopy(self)  # Make a copy so we don't change objects in this state
-        
-        def get_box_at(state, location):
-            for box in state.__boxes:
-                if box.location == location: return box
-            raise Exception('No box at location %s.' % location)
-        
-        def get_agent(state, agent):
-            for agt in state.__agents:
-                if agt == agent: return agt
-            raise Exception('Cannot find agent %s.' % agent)
-        
+        _state = deepcopy(self)
+
         for agent, action in joint_actions.items():
             # Get the agent and box location of the executed Action
             original_location = self.__level.location_from_action(agent.location, action)
             move_location = self.__level.location_from_action(agent.location, action, execute=True)
-            _agt = get_agent(_state, agent)
             
             if action.type == ActionType.NoOp:
                 pass
             elif action.type == ActionType.Move:
-                _agt.move(move_location)
+                _state.move_agent(agent, move_location)
             elif action.type in (ActionType.Pull, ActionType.Push):
                 if action.type is ActionType.Pull:
                     box_loc = original_location[1]
@@ -88,24 +107,21 @@ class State(object):
                     box_loc = original_location[0]
                     agt_mov_loc = move_location[0]
                     box_mov_loc = move_location[1]
-                _agt.move(agt_mov_loc)
-                _box = get_box_at(_state, box_loc)
-                _box.move(box_mov_loc)
+                _state.move_agent(agent, agt_mov_loc)
+                _state.move_box(box_loc, box_mov_loc)
         
-        _state._joint_actions = joint_actions.copy()
+        _state._joint_actions = deepcopy(joint_actions)
         _state._parent = self
         _state._g += 1
-        # deb(_state._g)
         return _state
     
     def get_expanded_states(self) -> '{State, ...}':
-        expanded_states = set()
+        expanded_states = []
         
-        agents = self.__agents
+        agents = self.agents
         applicable_actions = {
             agent: [action for action in Action if self.__is_applicable(agent, action)] for agent in agents
         }
-
         joint_action = {agent: [] for agent in agents}
         actions_permutation = {agent: 0 for agent in agents}
         num_agents = len(agents)
@@ -113,9 +129,9 @@ class State(object):
         while True:
             for agent in agents:
                 joint_action[agent] = applicable_actions[agent][actions_permutation[agent]]
-
+            
             if not self.__is_conflicting(joint_action):
-                expanded_states.add(self.__apply_action(joint_action))
+                expanded_states.append(self.__apply_action(joint_action))
 
             # Advance permutation.
             done = False
@@ -137,16 +153,12 @@ class State(object):
         return expanded_states
         
     def is_goal_state(self) -> 'bool':
-        
-        for agt in self.__agents:
-            if not agt.is_done():
-                return False
             
         for box in self.__boxes:
-            if not box.is_done():
-                return False
+            if box.has_reached():
+                return True
         
-        return True
+        return False
     
     def __is_applicable(self, agent: Agent, action: 'Action') -> 'bool':
         if action.type is ActionType.NoOp:
@@ -159,7 +171,7 @@ class State(object):
             except Exception:
                 # Location does not exist
                 return False
-
+        
         if action.type in (ActionType.Pull, ActionType.Push):
             try:
                 location = self.__level.location_from_action(agent.location, action)

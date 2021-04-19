@@ -36,18 +36,18 @@ class Controller(object):
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
         self.__strategy = configuration.race_type
                    
-    def __define_initial_goals(self):
-        # Define initial goal for the agents
-        # Based on these goals, the agents are going to update their desire
+    def __define_initial_destinations(self):
+        # Define initial destination for actors
+        # Based on these destinations, agents will update their desire
 
         for agent in self.__agents:
             agent.goals = self.__goals_for_agent(agent)
             
         for box in self.__boxes:
             box.destination = self.__destination_for_box(box)
-            
-    def __is_route_solid(self, agent: Agent, route: [Location, ...]):
-        """Check whether a given route is achievable for the given agent
+        
+    def __is_route_free(self, agent: Agent, route: [Location, ...]):
+        """Check whether a given route obstructed by something
         """
 
         # Check the position of all agents, ignoring the one making the route
@@ -57,7 +57,7 @@ class Controller(object):
         for loc in route:
             # Check if the location is a wall (shouldn't be, but dobble checking)
             if loc.is_wall:
-                return False
+                raise Exception("The path is blocked by a wall (?). find_route broken?")
 
             # Check if there is something in the way
             if loc in agent_locs or loc in box_locs:
@@ -87,7 +87,7 @@ class Controller(object):
         
         x == blurred
         
-        At this point we assume the route given is achievable (__is_route_solid was called).
+        At this point we assume the route given is achievable (__is_route_free was called).
         
         Args:
             route ([Location, ...]): List of locations leading from point A to B.
@@ -99,6 +99,7 @@ class Controller(object):
         # all_neighbors = set(loc for loc in route for loc in loc.neighbors)
         agt_neighbors = set(loc for agt in self.__agents for loc in agt.location.neighbors)
         boxes_neighbors = set(loc for box in self.__boxes for loc in box.location.neighbors)
+        goals = set(loc for loc, goal in self.__goals.items())  # Make sure goals are not set to walls (ask me why -_-')
         
         for row in _level.layout:
             for loc in row:
@@ -106,25 +107,24 @@ class Controller(object):
                 # 1) in the route;
                 # 2) is a neighbor location in the route;
                 # 3) is not already a wall.
-                if not loc in route and not loc in agt_neighbors.union(boxes_neighbors) and not loc.is_wall:
+                if not (loc in route or loc in agt_neighbors.union(boxes_neighbors) or loc.is_wall or loc in goals):
                     loc.is_wall = True
-
         return _level
     
     def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
         """Solve conflicts in agents' routes
         """
         
-        frontier = PriorityQueue()
+        frontier = set()
         iterations = 0
         # frontier = set of all leaf nodes available for expansion
-        frontier.put((0, State(level, agents, boxes)))
+        frontier.add(State(level, agents, boxes))
         explored = set()
-
+        
         while True:
 
             iterations += 1
-            if iterations % 1 == 0:
+            if iterations % 10000 == 0:
                 memory.print_search_status(explored, frontier)
 
             if memory.get_usage() > memory._max_usage:
@@ -133,11 +133,11 @@ class Controller(object):
                 return None
 
             # if the frontier is empty then return failure
-            if frontier.empty():
+            if frontier == set():
                 return None
 
             # choose a leaf node and remove it from the frontier
-            rank, state = frontier.get()
+            state = frontier.pop()
 
             # if the node contains a goal state then return the corresponding solution
             if state.is_goal_state():
@@ -151,9 +151,8 @@ class Controller(object):
             expanded = state.get_expanded_states()
 
             for n in expanded:
-                if not (n in frontier.queue or n in explored):
-                    # @TODO: change _g from state here
-                    frontier.put((n._g, n))
+                if not (n in frontier or n in explored):
+                    frontier.add(n)
 
     def __planner(self):
         # Assign route for agents
@@ -167,7 +166,7 @@ class Controller(object):
                 destination = agent.desire.location
                 route = self.__find_path(agent.location, destination)
 
-                if self.__is_route_solid(agent, route):
+                if self.__is_route_free(agent, route):
                     # Allow the agent to execute its route
                     agent.update_route(route)
                     actions = agent.derive_move_actions()
@@ -185,11 +184,18 @@ class Controller(object):
                 else:
                     # Conflicts
                     # @TODO: Get a list of agents and their routes
-                    route = self.__solve_conflicts(
+                    actions = self.__solve_conflicts(
                         self.__adapt_level(route),
                         deepcopy(agents),
                         deepcopy(boxes),
                     )
+                    
+                    for action_list in actions:
+                        for agt, actions in action_list.items():
+                            if agt.identifier == agent.identifier:
+                                agent.update_actions([actions])
+                                agent.move(agt.location)
+                        
         return self.__assemble()
 
     def __assemble(self) -> [Action, ...]:
@@ -222,7 +228,7 @@ class Controller(object):
         print('Solving level...', file=sys.stderr, flush=True)
         
         # Code goes here
-        self.__define_initial_goals()
+        self.__define_initial_destinations()
         self.__planner()
         
         return self.__assemble()
