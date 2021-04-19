@@ -71,7 +71,8 @@ class Controller(object):
         We blur out any location that:
             1) is not in the route;
             2) is not is a neighbor location in the route;
-            3) is not a wall.
+            3) is not a wall;
+            4) is not a goal.
             
         The reason for this is to give the search a sub-set of the level,
         so the search space is reduced. The reason not to blurry everything but the route
@@ -107,8 +108,10 @@ class Controller(object):
                 # 1) in the route;
                 # 2) is a neighbor location in the route;
                 # 3) is not already a wall.
+                # 4) Is not a goal
                 if not (loc in route or loc in agt_neighbors.union(boxes_neighbors) or loc.is_wall or loc in goals):
                     loc.is_wall = True
+        deb(_level)
         return _level
     
     def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
@@ -193,8 +196,8 @@ class Controller(object):
                     for action_list in actions:
                         for agt, actions in action_list.items():
                             if agt.identifier == agent.identifier:
-                                agent.update_actions([actions])
                                 agent.move(agt.location)
+                                agent.update_actions([actions])
                         
         return self.__assemble()
 

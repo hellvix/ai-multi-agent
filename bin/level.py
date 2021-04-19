@@ -38,6 +38,9 @@ class Level(object):
         """Return a deep copy of the object
         """
         return deepcopy(self)
+    
+    def __repr__(self):
+        return str(self.__layout)
         
     @property
     def layout(self):
