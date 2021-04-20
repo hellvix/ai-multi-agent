@@ -38,7 +38,7 @@ class Configuration(object):
 
         
     @property
-    def race_type(self):
+    def strategy_type(self):
         """The type of challenge we are dealing with.
 
         Returns:
@@ -167,11 +167,11 @@ class Configuration(object):
         __agents = self.__build_agents(__level)
         __boxes = self.__build_boxes(__level)
         __goals = self.__build_goals(__level)
-        self.__type = self.__get_race_type(__agents, __boxes, __goals)
+        self.__type = self.__get_strategy_type(__agents, __boxes, __goals)
         
         return __level, __agents, __boxes, __goals
     
-    def __get_race_type(self, agents: [Agent, ...], boxes: [Box, ...], goals: [Goal, ...]):
+    def __get_strategy_type(self, agents: [Agent, ...], boxes: [Box, ...], goals: [Goal, ...]):
         # Change configuration type
         if not boxes.any():
             return StrategyType.AGENTS

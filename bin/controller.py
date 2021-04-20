@@ -1,6 +1,7 @@
 import sys
 import time
 import memory
+import client
 
 from queue import PriorityQueue
 
@@ -34,21 +35,23 @@ class Controller(object):
         """Parses Configuration into data structure with objects
         """
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
-        self.__strategy = configuration.race_type
+        self.__strategy = configuration.strategy_type
                    
     def __define_initial_destinations(self):
         # Define initial destination for actors
         # Based on these destinations, agents will update their desire
 
         for agent in self.__agents:
-            agent.goals = self.__goals_for_agent(agent)
+            agent.goals = self.__destination_for_agent(agent)
             
         for box in self.__boxes:
             box.destination = self.__destination_for_box(box)
         
-    def __is_route_free(self, agent: Agent, route: [Location, ...]):
+    def __is_route_free(self, agent: Agent):
         """Check whether a given route obstructed by something
         """
+        
+        route = agent.current_route
 
         # Check the position of all agents, ignoring the one making the route
         agent_locs = set(agt.location for agt in self.__agents if agent != agt)
@@ -115,7 +118,7 @@ class Controller(object):
         return _level
     
     def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
-        """Solve conflicts in agents' routes
+        """Solve conflicts in agents' routes using state space search
         """
         
         frontier = set()
@@ -158,48 +161,90 @@ class Controller(object):
                     frontier.add(n)
 
     def __planner(self):
+        print('Planner initialized.', file=sys.stderr, flush=True)
+
         # Assign route for agents
         agents = self.__agents
         boxes = self.__boxes
 
+        # 'Found solution of length {}.'.format(len(actions))
         # @TODO: Improve which agent gets picked up first
         # @TODO: Allow parallelism between agent actions
+        
+        
+        # Each agent gets its route
         for agent in agents:
+            agent.update_desire()
             if agent.desire_type == DesireType.MOVE_TO_GOAL:
                 destination = agent.desire.location
                 route = self.__find_path(agent.location, destination)
-
-                if self.__is_route_free(agent, route):
-                    # Allow the agent to execute its route
-                    agent.update_route(route)
-                    actions = agent.derive_move_actions()
-                    act_sz = len(actions)
-                    agent.update_actions(actions)
+                
+                if agent.desire.is_box_desire():
+                    # Avoid sending the last route location
+                    # as a box is standing there
+                    route = route[:-1]
+                agent.update_route(route)
+        
+        # Checking route and generating actions
+        for agent in agents:
+            if agent.current_route:
+                if self.__is_route_free(agent):
+                    destination = agent.desire.location
+                    actions = Controller.generate_move_actions(agent.current_route)
                     agent.move(destination)
+                    agent.update_actions(actions)
+                
+        client.Client.send_to_server(self.__assemble())
+                            
+                # if self.__is_route_free(agent, route):
+                #     actions = generate_move_actions(route)
+                #     agent.update_actions(actions)
+                #     agent.move(destination)
+
+                #     # Allow the agent to execute its route
+                #     act_sz = len(actions)
                     
-                    # Update other agents' actions by making them wait
-                    # @TODO: If no conflict, then agents can perform things in parallel
-                    # @TODO: Improve. What to do while one agent is fulfilling its desire?
-                    for other_agt in agents:
-                        if other_agt != agent:
-                            other_agt.update_route([Action.NoOp for _ in range(act_sz)])
-                            other_agt.update_actions()
-                else:
-                    # Conflicts
-                    # @TODO: Get a list of agents and their routes
-                    actions = self.__solve_conflicts(
-                        self.__adapt_level(route),
-                        deepcopy(agents),
-                        deepcopy(boxes),
-                    )
+                #     # Update other agents' actions by making them wait
+                #     # @TODO: If no conflict, then agents can perform things in parallel
+                #     # @TODO: Improve. What to do while one agent is fulfilling its desire?
+                #     for other_agt in agents:
+                #         if other_agt != agent:
+                #             other_agt.update_route([Action.NoOp for _ in range(act_sz)])
+                #             other_agt.update_actions()
+                # else:
+                #     assert 0
+                #     # Conflicts
+                #     # @TODO: Get a list of agents and their routes
+                #     actions = self.__solve_conflicts(
+                #         self.__adapt_level(route),
+                #         deepcopy(agents),
+                #         deepcopy(boxes),
+                #     )
                     
-                    for action_list in actions:
-                        for agt, actions in action_list.items():
-                            if agt.identifier == agent.identifier:
-                                agent.move(agt.location)
-                                agent.update_actions([actions])
+                #     for action_list in actions:
+                #         for agt, actions in action_list.items():
+                #             if agt.identifier == agent.identifier:
+                #                 agent.move(agt.location)
+                #                 agent.update_actions([actions])
                         
-        return self.__assemble()
+        return None
+    
+    def __equalize_actions(self):
+        # Equalize actions size
+        agents = self.__agents
+
+        for agent in agents:
+            act_sz = len(agent.actions)
+
+            for other_agt in agents:
+                sz_diff = act_sz - len(other_agt.actions)
+                # Actions of current are greater
+                if sz_diff > 0:
+                    other_agt.update_actions(
+                        [Action.NoOp for _ in range(sz_diff)])
+                else:
+                    agent.update_actions(
+                        [Action.NoOp for _ in range(abs(sz_diff))])
 
     def __assemble(self) -> [Action, ...]:
         """Gather agents actions
@@ -207,6 +252,8 @@ class Controller(object):
         Returns:
             [Action, ...]: Agent actions
         """
+        # Make sure all actions have the same size
+        self.__equalize_actions()
         
         # Sanity check (routes must have the same length)
         sizes = [len(agent.actions)
@@ -221,9 +268,9 @@ class Controller(object):
         acts_sz = len(self.__agents[0].actions)  # number of actions
         f_route = [[] for _ in range(acts_sz)]
         
-        for action in range(acts_sz):
+        for act_index in range(acts_sz):
             for agent in self.__agents:
-                f_route[action].append(agent.actions[action])
+                f_route[act_index].append(agent.actions[act_index])
         
         return f_route
 
@@ -234,32 +281,27 @@ class Controller(object):
         self.__define_initial_destinations()
         self.__planner()
         
-        return self.__assemble()
-
-    def __goals_for_agents(self) -> [Location, ...]:
-        return {a: self.__goals_for_agent(a) for a in self.__agents}
+    def __destination_for_agents(self) -> [Location, ...]:
+        return {a: self.__destination_for_agent(a) for a in self.__agents}
     
-    def __goals_for_agent(self, agent: Agent) -> [Location, ...]:
+    def __destination_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
-        
-        Args:
-            agent (Agent): the agent
-
-        Raises:
-            Exception: If no goal exists for the agent.
-
-        Returns:
-            [Location, ...]: List of location objects
         """
-        _goals = {
-            loc for loc, goal in self.__goals.items() if goal.identifier == agent.identifier
-        }
-        
+        _goals = PriorityQueue()
+        if self.__strategy == StrategyType.AGENTS:
+            for loc, goal in self.__goals.items():
+                if goal.color == agent.color:
+                    _goals.put((agent.distance(goal), goal))
+        else:
+            for box in self.__boxes:
+                if box.color == agent.color:
+                    _goals.put((agent.distance(box), box))
         return _goals
 
     def __destination_for_box(self, box: Box) -> Location:
         _dests = {loc for loc, goal in self.__goals.items() if goal.identifier == box.identifier}
         
+        # If a box has more than one destination we only care about one
         if _dests: return _dests.pop()
 
         return None
@@ -326,7 +368,7 @@ class Controller(object):
                 open_list.append((child, child_f))
 
     @staticmethod
-    def generate_move(path: '[Location, ...]') -> '[Actions, ...]':
+    def generate_move_actions(path: '[Location, ...]') -> '[Actions, ...]':
         """Generate actions based on given locations.
 
         Author: dimos

@@ -69,3 +69,6 @@ class Actor(metaclass=ABCMeta):
         if not isinstance(location, Location):
             raise Exception('Parameter location must be an instance of Location.')
         self.__location = location
+        
+    def distance(self, actor: 'Actor') -> int:
+        return self.location.manhattan_distance(actor.location)

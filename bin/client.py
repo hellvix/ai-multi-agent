@@ -118,20 +118,19 @@ class Client(object):
         # Client returns raw data from the server
         configuration = Client.parse_level(server_messages)
         
-        # Search for a route.
         print('Initializing controller...', file=sys.stderr, flush=True)
         
         controller = Controller(configuration)
-        route = controller.deploy()
-        
-        # Print route to server.
-        if route is None:
-            print('Unable to solve level.', file=sys.stderr, flush=True)
-            sys.exit(0)
-        else:
-            print('Found solution of length {}.'.format(len(route)), file=sys.stderr, flush=True)
+        controller.deploy()
+        sys.exit(0)
+                
+    @staticmethod
+    def send_to_server(actions: [['Actions', ...], ...]) -> None:
+        """Send actions to the server. Must be already formatted.
+        """
+        server_messages = sys.stdin
             
-            for joint_action in route:
-                print("|".join(a.name_ for a in joint_action), flush=True)
-                # We must read the server's response to not fill up the stdin buffer and block the server.
-                response = server_messages.readline()
+        for joint_action in actions:
+            print("|".join(a.name_ for a in joint_action), flush=True)
+            # We must read the server's response to not fill up the stdin buffer and block the server.
+            response = server_messages.readline()

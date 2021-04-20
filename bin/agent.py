@@ -1,3 +1,7 @@
+from eprint import deb
+
+from queue import PriorityQueue
+
 from goal import Goal
 from actor import Actor
 from action import Action
@@ -7,9 +11,9 @@ from desire import Desire, DesireType
 class Agent(Actor):
     
     def __init__(self, *args, **kwargs):
-        self.__goals = set()  # Goal objects
         super().__init__(*args, **kwargs)
         
+        self.__goals = PriorityQueue()
         self.__desire = None
         # Current route. Can either be discarded or be added to master route
         self.__current_route = None
@@ -38,35 +42,20 @@ class Agent(Actor):
             _hash = _hash * prime + hash(tuple((self.location.row, self.location.col)))
             self._hash = _hash
         return self._hash
-    
-    def _get_goal(self):
-        """Pop the first Goal from the list.
-        
-        @IMPORTANT: The goal is removed from the list!
-        """
-        return self.__goals.pop()
-    
-    def add_goal(self, distance: int, goal: Goal):
-        self.__goals.add(goal)
         
     @property
     def current_route(self):
         return self.__current_route
     
     def update_route(self, route: [Location, ...]):
-        if not isinstance(route[0], Location):
+        if route and not isinstance(route[0], Location):
             raise Exception('The agent route must be a list of Locations, not %s.' % type(route[0]))
+        
         self.__current_route = route
         
     @property
     def actions(self):
         return self.__actions
-    
-    def derive_move_actions(self):
-        """Derive move actions from current route.
-        """
-        from controller import Controller
-        return Controller.generate_move(self.current_route)
     
     def update_actions(self, actions: [Action, ...]):
         self.__actions.extend(actions)
@@ -78,19 +67,30 @@ class Agent(Actor):
         if not self.desire:
             return True
         return self.location == self.desire.location
+    
+    def _get_goal(self):
+        """Pop the first Goal from the list.
+        
+        @IMPORTANT: The goal is removed from the list!
+        """
+        return self.__goals.get()
+
+    def add_goal(self, distance: int, goal: Goal):
+        self.__goals.add(goal)
         
     @property
     def goals(self) -> set:
         return self.__goals
     
     @goals.setter
-    def goals(self, goals: set):
+    def goals(self, goals: PriorityQueue):
         # When we set new goals we update the desire
+        if not isinstance(goals, PriorityQueue):
+            raise Exception('Attribute goals must be of type PriorityQueue.')
         self.__goals = goals
-        self._update_desire()
 
     def _has_goals(self) -> bool:
-        return not self.__goals == set()
+        return not self.__goals.empty()
     
     @property
     def desire(self):
@@ -100,15 +100,19 @@ class Agent(Actor):
     def desire_type(self):
         return self.__desire.type
     
-    def _update_desire(self):
+    def update_desire(self):
         if not self._has_goals():
             self.__desire = Desire(DesireType.SLEEP)
         else:
+            distance, _g = self._get_goal()
             self.__desire = Desire(
-                DesireType.MOVE_TO_GOAL,
-                self._get_goal()
+                type=DesireType.MOVE_TO_GOAL,
+                obj=_g,
+                location=_g.location
             )
-            
+    
+    def is_equal(self, other: 'Agent'):
+        return self.identifier == other.identifier
         
     def move(self, location: Location):
         super().move(location)
