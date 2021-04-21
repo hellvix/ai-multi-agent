@@ -1,17 +1,19 @@
+import location
+
 from color import Color
-from abc import ABCMeta, abstractmethod
 
-
-class Actor(metaclass=ABCMeta):
+class Actor(object):
     __identifier = None
     __location = None
     __color = None
     _hash = None
+    __current_route = None
 
     def __init__(self, identifier: str, location: 'Location', color: Color):
         self.__identifier = identifier
         self.__location = location
         self.__color = color
+        self.__current_route = None
         
         self._hash
         
@@ -42,7 +44,6 @@ class Actor(metaclass=ABCMeta):
     def __repr__(self):
         return self.__str__()
 
-    @abstractmethod
     def __actor_type__(self): raise NotImplementedError
 
     @property
@@ -70,5 +71,19 @@ class Actor(metaclass=ABCMeta):
             raise Exception('Parameter location must be an instance of Location.')
         self.__location = location
         
-    def distance(self, actor: 'Actor') -> int:
-        return self.location.manhattan_distance(actor.location)
+    def distance(self, location: 'Location') -> int:
+        return self.location.manhattan_distance(location)
+
+    @property
+    def current_route(self):
+        return self.__current_route
+    
+    def clear_route(self):
+        self.__current_route = None
+
+    def update_route(self, route: ['Location', ...]):
+        if route and not isinstance(route[0], location.Location):
+            raise Exception(
+                'The agent route must be a list of Locations, not %s.' % type(route[0]))
+
+        self.__current_route = route

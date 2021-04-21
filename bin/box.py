@@ -31,3 +31,10 @@ class Box(Actor):
             return False
 
         return super().__eq__(value)
+
+    @property
+    def current_route(self):
+        return self.__current_route
+
+    def set_current_route(self, route: ['Location', ...]):
+        self.__current_route = route

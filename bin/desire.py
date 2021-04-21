@@ -7,7 +7,6 @@ from location import Location
 class DesireType(Enum):
     SLEEP = 0
     MOVE_TO_GOAL = 1  # Location (Box or Goal), controller decides
-    NEED_HELP = 2
 
 
 class Desire(object):

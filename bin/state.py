@@ -65,6 +65,22 @@ class State(object):
             state = state._parent
         return plan
     
+    def __box_to_goal_heuristic(self):
+        return sum(box.distance(box.destination) for box in self.__boxes)
+    
+    def __goal_count_heuristic(self):
+        h = len(self.__boxes)
+        
+        for box in self.__boxes:
+            if box.has_reached():
+                h -= 1
+
+        return h
+    
+    @property
+    def hrt_value(self):
+        return self._g + self.__goal_count_heuristic() + self.__box_to_goal_heuristic()
+    
     def move_box(self, rboxloc: Location, nloc: Location):
         """Change object in deepcopy
         """
@@ -81,8 +97,9 @@ class State(object):
         # Get box in the copied state so we don't change the one we are in
         for na, _dagt in enumerate(self.__agents):
             if _dagt.identifier == ragent.identifier:
-                self.__agents[na].move(self.__level.get_location(
-                    (aloc.row, aloc.col), translate=True))
+                self.__agents[na].move(
+                    self.__level.get_location((aloc.row, aloc.col), translate=True)
+                )
                 return self.__agents[na]
         raise Exception('Cannot find agent %s.' % ragent)
     
@@ -171,7 +188,7 @@ class State(object):
             except Exception:
                 # Location does not exist
                 return False
-        
+
         if action.type in (ActionType.Pull, ActionType.Push):
             try:
                 location = self.__level.location_from_action(agent.location, action)

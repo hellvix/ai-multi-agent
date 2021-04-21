@@ -29,10 +29,10 @@ class Location(object):
 
     def __str__(self):
         # LY,X === LROW, COL
-        return "{}{},{}".format(
+        return "{}R{},C{}".format(
             'W' if self.is_wall else 'L',
             self.row,  # Y
-            self.col,  # y
+            self.col   # y
         )
 
     def __eq__(self, value):
@@ -43,9 +43,6 @@ class Location(object):
             raise Exception(
                 'Cannot compare Location with %s.' % type(value)
             )
-        
-        if self.is_wall != value.is_wall:
-            return False
         
         if (self.row != value.row) or (self.col != value.col):
             return False
