@@ -54,13 +54,9 @@ class Controller(object):
                 return agent
         raise Exception('Box has no owner (?).')
         
-    def __get_conflicting_actors(self, agent: Agent):
-        """Check whether a given route conflicts with another route
-        """
-        
+    def __check_conflicts(self, agent: Agent):
         route = agent.current_route
         
-        conflicts = {'agents': [], 'boxes': []}
         # All box and agent positions
         agents = {agt.location: agt for agt in self.__agents if agent != agt}
         boxes = {box.location: box for box in self.__boxes}
@@ -71,13 +67,20 @@ class Controller(object):
                 raise Exception("The path is blocked by a wall (?). find_route broken?")
 
             if loc in agents:
-                conflicts['agents'].append(agents[loc])
+                return True
                 
             if loc in boxes:
-                box = boxes[loc]
-                conflicts['agents'].append(self.get_box_owner(box))
+                return True
 
-        return conflicts
+        return False
+    
+    def __is_goal(self, location: 'Location'):
+        """Check whether the given position is a goal
+
+        Returns:
+            [bool]: [whether the position is a goal]
+        """
+        return location in {loc for loc, goal in self.__goals.items()}
     
     def __downsize_level(self, agent: Agent):
         """Copy and modify the level according to the route.
@@ -102,7 +105,7 @@ class Controller(object):
         
         x == blurred
         
-        At this point we assume the route given is achievable (__get_conflicting_actors was called).
+        At this point we assume the route given is achievable (__check_conflicts was called).
         
         Args:
             route ([Location, ...]): List of locations leading from point A to B.
@@ -112,16 +115,26 @@ class Controller(object):
         """
         
         _level = self.__level.clone()
-        # all_neighbors = set(loc for loc in route for loc in loc.neighbors)
-        boxes_neighbors = set(
+        # SETS THAT DO NOT BECOME WALLS
+        boxes_neighbors = {
             loc for box in self.__boxes for loc in box.location.neighbors if box.color == agent.color
-        )
-        boxes_routes = set(
+        }
+        boxes_routes = {
             loc for box in self.__boxes for loc in box.current_route if box.color == agent.color
-        )
-        goals_neighbors = set(
-            loc for loc, goal in self.__goals.items() for loc in goal.location.neighbors
-        )  # Make sure goals are not set to walls (ask me why -_-')
+        }
+        # Neighbors for goals the agent own. 
+        # If one of these neighbors is a goal itself it must belong to the agent
+        goals_neighbors = {
+            loc for loc, goal in self.__goals.items() for loc in goal.location.neighbors \
+                if goal.color == agent.color and not self.__is_goal(loc)
+        }
+        agt_neighbors = {
+            loc for loc in agent.location.neighbors
+        }
+        
+        current_route = {
+            loc for loc in agent.current_route
+        }
         
         for row in _level.layout:
             for loc in row:
@@ -131,11 +144,16 @@ class Controller(object):
                 # 3) is not already a wall.
                 # 4) Is not a goal
                 if not (
-                    loc in boxes_neighbors.union(boxes_routes, goals_neighbors) or
+                    loc in boxes_neighbors.union(
+                        current_route,
+                        boxes_routes,
+                        goals_neighbors,
+                        agt_neighbors
+                    ) or
                     loc.is_wall
                 ):
                     loc.is_wall = True
-        deb(_level)
+        deb(agent,_level)
         return _level
     
     def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
@@ -192,11 +210,8 @@ class Controller(object):
             'boxes': []
         }
 
-        # 'Found solution of length {}.'.format(len(actions))
-        # @TODO: Improve which agent gets picked up first
-        # @TODO: Allow parallelism between agent actions
-        
-        # Each agent gets a route
+        # Computing route for each agent
+        print('Generating initial plan for agents...', file=sys.stderr, flush=True)
         for agent in agents:
             agent.update_desire()
             if agent.desire_type == DesireType.MOVE_TO_GOAL:
@@ -211,81 +226,51 @@ class Controller(object):
                     
                 agent.update_route(route)
         
-        # Generate actions based on routes
+        print('Checking for conflicts...', file=sys.stderr, flush=True)
         for agent in agents:
             if agent.current_route:
-                a_conflicts = self.__get_conflicting_actors(agent)
+                # Check for conflicts in the current route
+                conflicts = self.__check_conflicts(agent)
+                # Move this agent until its destination
+                destination = agent.desire.location
+                actions = Controller.generate_move_actions(agent.current_route)
+                sz_act = len(actions)
+                agent.move(destination)  # location nearby box
+                agent.update_actions(actions)
                 
-                if a_conflicts:
-                    destination = agent.desire.location
-                    actions = Controller.generate_move_actions(agent.current_route)
-                    sz_act = len(actions)
-                    agent.move(destination)  # location nearby box
-                    agent.update_actions(actions)
-                    # @TODO: make other agents wait
+                if conflicts:
+                    # Make other agents wait while this agent is moving
+                    self.__make_agents_wait(exception=agent, length=sz_act)
                     
-                    for other_agt in self.__agents:
-                        if not other_agt.equals(agent):
-                            other_agt.update_actions([Action.NoOp for _ in range(sz_act)])
+                    # We have already moved, clearing actions
 
-                    self.__equalize_actions()
-                    client.Client.send_to_server(self.__assemble())
-                    agent.clear_actions()
-                
                     _level = self.__downsize_level(agent)
                     list_actions = self.__solve_conflicts(
                         _level,
-                        deepcopy(self.__agents),
+                        np.array([agent]),
                         deepcopy(self.__boxes)
                     )
 
+                    # Get all actions
                     agt_actions = []
                     for acts in list_actions:
                         for agt, action in acts.items():
                             if agt.equals(agent):
                                 agt_actions.append(action)
+                                
                     agent.update_actions(agt_actions)
+                    self.__make_agents_wait(agent, sz_act)
                     
-                    self.__equalize_actions()
-                    client.Client.send_to_server(self.__assemble())
-                    agent.clear_actions()
-
-                            
-                # if self.__get_conflicting_actors(agent, route):
-                #     actions = generate_move_actions(route)
-                #     agent.update_actions(actions)
-                #     agent.move(destination)
-
-                #     # Allow the agent to execute its route
-                #     act_sz = len(actions)
-                    
-                #     # Update other agents' actions by making them wait
-                #     # @TODO: If no conflict, then agents can perform things in parallel
-                #     # @TODO: Improve. What to do while one agent is fulfilling its desire?
-                #     for other_agt in agents:
-                #         if other_agt != agent:
-                #             other_agt.update_route([Action.NoOp for _ in range(act_sz)])
-                #             other_agt.update_actions()
-                # else:
-                #     assert 0
-                #     # Conflicts
-                #     # @TODO: Get a list of agents and their routes
-                #     actions = self.__solve_conflicts(
-                #         self.__downsize_level(route),
-                #         deepcopy(agents),
-                #         deepcopy(boxes),
-                #     )
-                    
-                #     for action_list in actions:
-                #         for agt, actions in action_list.items():
-                #             if agt.identifier == agent.identifier:
-                #                 agent.move(agt.location)
-                #                 agent.update_actions([actions])
+        self.__equalize_actions()
+        client.Client.send_to_server(self.__assemble())
+                # agent.clear_actions()
                         
-        return None
+        return
     
     def __equalize_actions(self):
-        """Gather agent actions and make sure they have the same size
+        """ Usually called after generating actions for the agents. 
+        This method ensure all agents have the same length in actions. 
+        The difference is filled with NoOp actions.
         """
         # Equalize actions size
         agents = self.__agents
@@ -302,6 +287,18 @@ class Controller(object):
                 else:
                     agent.update_actions(
                         [Action.NoOp for _ in range(abs(sz_diff))])
+        return
+    
+    def __make_agents_wait(self, exception: Agent, length: int):
+        """Insert NoOps for all agents except the given one.
+
+        Args:
+            agent (exception): Agent it does not apply to
+        """
+        for other_agt in self.__agents:
+            if not other_agt.equals(exception):
+                other_agt.update_actions([Action.NoOp for _ in range(length)])
+        return
 
     def __assemble(self) -> [Action, ...]:
         """Gather agents actions so they can be streamlined to the server
