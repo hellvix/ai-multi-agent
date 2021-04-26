@@ -69,12 +69,19 @@ class State(object):
         return sum(box.distance(box.destination) for box in self.__boxes)
     
     def __goal_count_heuristic(self):
-        h = len(self.__boxes)
+        h = 0
         
-        for box in self.__boxes:
-            if box.has_reached():
-                h -= 1
-
+        # Distance from agent to desire (either box or goal)
+        for agent in self.__agents:
+            h += agent.distance(agent.desire.location)
+        
+        # Distance from boxe to destination
+        if self.__boxes.size:
+            h += len(self.__boxes)
+            
+            for box in self.__boxes:
+                if box.has_reached():
+                    h -= 1
         return h
     
     @property

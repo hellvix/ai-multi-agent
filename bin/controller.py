@@ -57,21 +57,15 @@ class Controller(object):
     def __check_conflicts(self, agent: Agent):
         route = agent.current_route
         
-        # All box and agent positions
-        agents = {agt.location: agt for agt in self.__agents if agent != agt}
-        boxes = {box.location: box for box in self.__boxes}
-        
         for loc in route:
-            # Check if the location is a wall (shouldn't be, but dobble checking)
-            if loc.is_wall:
-                raise Exception("The path is blocked by a wall (?). find_route broken?")
+            if loc != agent.location:
 
-            if loc in agents:
-                return True
+                if loc.is_wall:
+                    raise Exception("The path is blocked by a wall (?). find_route broken?")
+
+                if not self.__is_location_free(loc):
+                    return True
                 
-            if loc in boxes:
-                return True
-
         return False
     
     def __is_goal(self, location: 'Location'):
@@ -81,6 +75,20 @@ class Controller(object):
             [bool]: [whether the position is a goal]
         """
         return location in {loc for loc, goal in self.__goals.items()}
+    
+    @property
+    def occupied_locations(self):
+        goal_loc = {loc for loc, goal in self.__goals.items()}
+        agent_loc = {agent.location for agent in self.__agents}
+        box_loc = {box.location for box in self.__boxes}
+        
+        return goal_loc.union(
+            agent_loc,
+            box_loc
+        )
+    
+    def __is_location_free(self, location: 'Location'):
+        return not location in self.occupied_locations
     
     def __downsize_level(self, agent: Agent):
         """Copy and modify the level according to the route.
@@ -115,6 +123,7 @@ class Controller(object):
         """
         
         _level = self.__level.clone()
+        
         # SETS THAT DO NOT BECOME WALLS
         boxes_neighbors = {
             loc for box in self.__boxes for loc in box.location.neighbors if box.color == agent.color
@@ -122,16 +131,16 @@ class Controller(object):
         boxes_routes = {
             loc for box in self.__boxes for loc in box.current_route if box.color == agent.color
         }
-        # Neighbors for goals the agent own. 
-        # If one of these neighbors is a goal itself it must belong to the agent
+        # Locations around goals the agent own. If another goal is found
+        # it must belong to the agent
         goals_neighbors = {
             loc for loc, goal in self.__goals.items() for loc in goal.location.neighbors \
                 if goal.color == agent.color and not self.__is_goal(loc)
         }
+        # Locations around the agent
         agt_neighbors = {
             loc for loc in agent.location.neighbors
         }
-        
         current_route = {
             loc for loc in agent.current_route
         }
@@ -145,15 +154,15 @@ class Controller(object):
                 # 4) Is not a goal
                 if not (
                     loc in boxes_neighbors.union(
-                        current_route,
                         boxes_routes,
                         goals_neighbors,
-                        agt_neighbors
+                        agt_neighbors,
+                        current_route
                     ) or
                     loc.is_wall
                 ):
                     loc.is_wall = True
-        deb(agent,_level)
+        deb(_level)
         return _level
     
     def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
@@ -210,25 +219,26 @@ class Controller(object):
             'boxes': []
         }
 
-        # Computing route for each agent
+        # Computing route for each agent desire
         print('Generating initial plan for agents...', file=sys.stderr, flush=True)
         for agent in agents:
             agent.update_desire()
+
             if agent.desire_type == DesireType.MOVE_TO_GOAL:
                 destination = agent.desire.location
                 route = self.__find_path(agent.location, destination)
                 
                 if agent.desire.is_box_desire():
-                    # Avoid sending the last route location
-                    # (box is standing there)
+                    # Avoid sending the last location (box is standing there)
                     route = route[:-1]
                     agent.desire.location = route[-1:][0]
                     
                 agent.update_route(route)
         
-        print('Checking for conflicts...', file=sys.stderr, flush=True)
         for agent in agents:
-            if agent.current_route:
+            print('Checking conflicts for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
+            
+            if agent.has_route():
                 # Check for conflicts in the current route
                 conflicts = self.__check_conflicts(agent)
                 # Move this agent until its destination
@@ -237,33 +247,28 @@ class Controller(object):
                 sz_act = len(actions)
                 agent.move(destination)  # location nearby box
                 agent.update_actions(actions)
+                deb('agent is at ', agent)
+
+                _level = self.__downsize_level(agent)
+                list_actions = self.__solve_conflicts(
+                    _level,
+                    np.array([agent]),
+                    deepcopy(np.array([box for box in self.__boxes if box.color == agent.color]))
+                )
+                print('Generating plan from states...', file=sys.stderr, flush=True)
+
+                # Get all actions
+                agt_actions = []
+                for acts in list_actions:
+                    for agt, action in acts.items():
+                        if agt.equals(agent):
+                            agt_actions.append(action)
+                            
+                agent.update_actions(agt_actions)
+                self.__make_agents_wait(agent, sz_act)
+                self.__equalize_actions()
+                client.Client.send_to_server(self.__assemble())
                 
-                if conflicts:
-                    # Make other agents wait while this agent is moving
-                    self.__make_agents_wait(exception=agent, length=sz_act)
-                    
-                    # We have already moved, clearing actions
-
-                    _level = self.__downsize_level(agent)
-                    list_actions = self.__solve_conflicts(
-                        _level,
-                        np.array([agent]),
-                        deepcopy(self.__boxes)
-                    )
-
-                    # Get all actions
-                    agt_actions = []
-                    for acts in list_actions:
-                        for agt, action in acts.items():
-                            if agt.equals(agent):
-                                agt_actions.append(action)
-                                
-                    agent.update_actions(agt_actions)
-                    self.__make_agents_wait(agent, sz_act)
-                    
-        self.__equalize_actions()
-        client.Client.send_to_server(self.__assemble())
-                # agent.clear_actions()
                         
         return
     

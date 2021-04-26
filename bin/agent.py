@@ -42,6 +42,9 @@ class Agent(Actor):
     def actions(self):
         return self.__actions
     
+    def has_route(self):
+        return not self.current_route == None
+    
     def update_actions(self, actions: [Action, ...]):
         self.__actions.extend(actions)
 
