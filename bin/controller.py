@@ -55,19 +55,41 @@ class Controller(object):
         raise Exception('Box has no owner (?).')
     
     def __check_conflicts(self, agent: Agent):
+        """Check for conflicts with the current agent's route.
+
+        Args:
+            agent (Agent): the agent to have its route checked.
+
+        Raises:
+            Exception: Exception if by mistake the given route has a wall.
+
+        Returns:
+            [list]: An empty list of agents with conflicting interests with the current route
+        """
         route = agent.current_route
-        other_routes = {loc for agt in self.__agents for loc in agt.current_route}
+        other_routes = {loc: agt for agt in self.__agents for loc in agt.current_route if not agt.equals(agent)}
+        box_locations = {box.location: self.get_box_owner(box) for box in self.__boxes}
+        agent_locations = {agt.location: agt for agt in self.__agents if not agt.equals(agent)}
+        _actors = set()
         
         for loc in route:
             if loc.is_wall:
                 raise Exception("The path is blocked by a wall (?). find_route broken?")
+            
             if loc != agent.location:
-                if not self.__is_location_free(loc):
-                    return True
+                if loc in box_locations:
+                    oagt = box_locations[loc]
+                    if not oagt.equals(agent):
+                        _actors.add(box_locations[loc])
+                    
+                if loc in agent_locations:
+                    _actors.add(agent_locations[loc])
                 
                 if loc in other_routes:
-                    return True
-        return False
+                    _actors.add(other_routes[loc])
+                    
+        deb('Conflicts found: ', _actors)
+        return _actors
     
     def __is_goal(self, location: 'Location'):
         """Check whether the given position is a goal
@@ -242,8 +264,9 @@ class Controller(object):
                 actions = Controller.generate_move_actions(agent.current_route)
                 agent.update_actions(actions)
                 agent.move(agent.desire.location)  # location nearby box
+                conflicts = self.__check_conflicts(agent)
 
-                if self.__check_conflicts(agent):
+                if conflicts:
                     print('Doing state-space search...', file=sys.stderr, flush=True)
                     _level = self.__downsize_level(agent)
                     list_actions = self.__solve_conflicts(
@@ -259,9 +282,12 @@ class Controller(object):
                             if agt.equals(agent):
                                 agt_actions.append(action)
                     agent.update_actions(agt_actions)
-                    self.__make_agents_wait(agent)
-                print('Solving level...', file=sys.stderr, flush=True)
 
+                    # @TODO: Make only the agents that are in the path wait
+                    self.__make_agents_wait(agent, conflicts)
+                print('Solving level...', file=sys.stderr, flush=True)
+                
+        self.__equalize_actions()
         client.Client.send_to_server(self.__assemble())
     
     def __equalize_actions(self):
@@ -276,28 +302,25 @@ class Controller(object):
             act_sz = len(agent.actions)
 
             for other_agt in agents:
-                if not agent.equals(other_agt):
+                if not other_agt.equals(agent):
                     sz_diff = act_sz - len(other_agt.actions)
                     # Actions of current are greater
                     if sz_diff > 0:
                         other_agt.update_actions(
                             [Action.NoOp for _ in range(sz_diff)]
                         )
-                    else:
-                        agent.update_actions(
-                            [Action.NoOp for _ in range(abs(sz_diff))]
-                        )
         return
     
-    def __make_agents_wait(self, agent: Agent):
+    def __make_agents_wait(self, agent: Agent, agents: {Agent, ...}):
         """Insert NoOps for agents. 
         Handful when one agent is executing its actions and the others have to wait.
 
         Args:
             agent (Agent): The agent we derive the waiting from.
         """
+        
         for other_agt in self.__agents:
-            if not other_agt.equals(agent):
+            if not other_agt.equals(agent) and other_agt in agents:
                 sz_dif = len(agent.actions) - len(other_agt.actions)
                 if sz_dif > 0:
                     other_agt.update_actions([Action.NoOp for _ in range(sz_dif)])
@@ -311,8 +334,8 @@ class Controller(object):
         """
         
         # Sanity check (routes must have the same length)
-        sizes = [len(agent.actions)
-                 for agent in self.__agents]  # Size of all actions
+        sizes = [len(agent.actions) for agent in self.__agents]  # Size of all actions
+        deb(sizes)
         gsiz = groupby(sizes)
 
         if next(gsiz, True) and next(gsiz, False):
