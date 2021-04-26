@@ -53,19 +53,20 @@ class Controller(object):
             if agent.color == box.color:
                 return agent
         raise Exception('Box has no owner (?).')
-        
+    
     def __check_conflicts(self, agent: Agent):
         route = agent.current_route
+        other_routes = {loc for agt in self.__agents for loc in agt.current_route}
         
         for loc in route:
+            if loc.is_wall:
+                raise Exception("The path is blocked by a wall (?). find_route broken?")
             if loc != agent.location:
-
-                if loc.is_wall:
-                    raise Exception("The path is blocked by a wall (?). find_route broken?")
-
                 if not self.__is_location_free(loc):
                     return True
                 
+                if loc in other_routes:
+                    return True
         return False
     
     def __is_goal(self, location: 'Location'):
@@ -239,42 +240,34 @@ class Controller(object):
             print('Checking conflicts for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
             
             if agent.has_route():
-                # Check for conflicts in the current route
-                conflicts = self.__check_conflicts(agent)
-                # Move this agent until its destination
-                destination = agent.desire.location
                 actions = Controller.generate_move_actions(agent.current_route)
-                sz_act = len(actions)
-                agent.move(destination)  # location nearby box
                 agent.update_actions(actions)
-                deb('agent is at ', agent)
+                agent.move(agent.desire.location)  # location nearby box
 
-                _level = self.__downsize_level(agent)
-                list_actions = self.__solve_conflicts(
-                    _level,
-                    np.array([agent]),
-                    deepcopy(np.array([box for box in self.__boxes if box.color == agent.color]))
-                )
-                print('Generating plan from states...', file=sys.stderr, flush=True)
+                if self.__check_conflicts(agent):
+                    print('Doing state-space search...', file=sys.stderr, flush=True)
+                    _level = self.__downsize_level(agent)
+                    list_actions = self.__solve_conflicts(
+                        _level,
+                        np.array([agent]),
+                        deepcopy(np.array([box for box in self.__boxes if box.color == agent.color]))
+                    )
+                    print('Extracting plan...', file=sys.stderr, flush=True)
+                    # Extracting actions
+                    agt_actions = []
+                    for acts in list_actions:
+                        for agt, action in acts.items():
+                            if agt.equals(agent):
+                                agt_actions.append(action)
+                    agent.update_actions(agt_actions)
+                    self.__make_agents_wait(agent)
+                print('Solving level...', file=sys.stderr, flush=True)
 
-                # Get all actions
-                agt_actions = []
-                for acts in list_actions:
-                    for agt, action in acts.items():
-                        if agt.equals(agent):
-                            agt_actions.append(action)
-                            
-                agent.update_actions(agt_actions)
-                self.__make_agents_wait(agent, sz_act)
-                self.__equalize_actions()
-                client.Client.send_to_server(self.__assemble())
-                
-                        
-        return
+        client.Client.send_to_server(self.__assemble())
     
     def __equalize_actions(self):
         """ Usually called after generating actions for the agents. 
-        This method ensure all agents have the same length in actions. 
+        This method ensures all agents have the same length in actions. 
         The difference is filled with NoOp actions.
         """
         # Equalize actions size
@@ -284,25 +277,31 @@ class Controller(object):
             act_sz = len(agent.actions)
 
             for other_agt in agents:
-                sz_diff = act_sz - len(other_agt.actions)
-                # Actions of current are greater
-                if sz_diff > 0:
-                    other_agt.update_actions(
-                        [Action.NoOp for _ in range(sz_diff)])
-                else:
-                    agent.update_actions(
-                        [Action.NoOp for _ in range(abs(sz_diff))])
+                if not agent.equals(other_agt):
+                    sz_diff = act_sz - len(other_agt.actions)
+                    # Actions of current are greater
+                    if sz_diff > 0:
+                        other_agt.update_actions(
+                            [Action.NoOp for _ in range(sz_diff)]
+                        )
+                    else:
+                        agent.update_actions(
+                            [Action.NoOp for _ in range(abs(sz_diff))]
+                        )
         return
     
-    def __make_agents_wait(self, exception: Agent, length: int):
-        """Insert NoOps for all agents except the given one.
+    def __make_agents_wait(self, agent: Agent):
+        """Insert NoOps for agents. 
+        Handful when one agent is executing its actions and the others have to wait.
 
         Args:
-            agent (exception): Agent it does not apply to
+            agent (Agent): The agent we derive the waiting from.
         """
         for other_agt in self.__agents:
-            if not other_agt.equals(exception):
-                other_agt.update_actions([Action.NoOp for _ in range(length)])
+            if not other_agt.equals(agent):
+                sz_dif = len(agent.actions) - len(other_agt.actions)
+                if sz_dif > 0:
+                    other_agt.update_actions([Action.NoOp for _ in range(sz_dif)])
         return
 
     def __assemble(self) -> [Action, ...]:
@@ -332,8 +331,6 @@ class Controller(object):
         return f_route
 
     def deploy(self) -> [Action, ...]:
-        print('Solving level...', file=sys.stderr, flush=True)
-        
         # Code goes here
         self.__define_initial_destinations()
         self.__planner()

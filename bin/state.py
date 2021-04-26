@@ -68,25 +68,30 @@ class State(object):
     def __box_to_goal_heuristic(self):
         return sum(box.distance(box.destination) for box in self.__boxes)
     
-    def __goal_count_heuristic(self):
-        h = 0
-        
+    def __agent_to_box_heuristic(self):
+        d = 0
+
         # Distance from agent to desire (either box or goal)
         for agent in self.__agents:
-            h += agent.distance(agent.desire.location)
-        
-        # Distance from boxe to destination
-        if self.__boxes.size:
-            h += len(self.__boxes)
+            d += agent.distance(agent.desire.location)
             
-            for box in self.__boxes:
-                if box.has_reached():
-                    h -= 1
-        return h
+        return d
+    
+    def __goal_count_heuristic(self):
+        g = len(self.__boxes)
+        
+        for box in self.__boxes:
+            if box.has_reached():
+                g -= 1
+
+        return g
     
     @property
     def hrt_value(self):
-        return self._g + self.__goal_count_heuristic() + self.__box_to_goal_heuristic()
+        return self._g + \
+            self.__goal_count_heuristic() + \
+            self.__box_to_goal_heuristic() + \
+            self.__agent_to_box_heuristic()
     
     def move_box(self, rboxloc: Location, nloc: Location):
         """Change object in deepcopy
