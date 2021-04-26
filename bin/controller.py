@@ -163,7 +163,6 @@ class Controller(object):
                     loc.is_wall
                 ):
                     loc.is_wall = True
-        deb(_level)
         return _level
     
     def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
