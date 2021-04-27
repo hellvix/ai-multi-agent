@@ -116,7 +116,7 @@ class Controller(object):
     def __downsize_level(self, agent: Agent):
         """Copy and modify the level according to the route.
         
-        We blur out any location that:
+        We cement out any location that:
             1) is not in the route;
             2) is not is a neighbor location in the route;
             3) is not a wall;
@@ -134,7 +134,7 @@ class Controller(object):
         [x, -, -, -, x, x]
         [x, x, x, x, x, x]
         
-        x == blurred
+        x == wall
         
         At this point we assume the route given is achievable (__check_conflicts was called).
         
@@ -185,6 +185,7 @@ class Controller(object):
                     loc.is_wall
                 ):
                     loc.is_wall = True
+        deb(_level)
         return _level
     
     def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
@@ -277,11 +278,15 @@ class Controller(object):
                     print('Extracting plan...', file=sys.stderr, flush=True)
                     # Extracting actions
                     agt_actions = []
+                    last_location = None
                     for acts in list_actions:
                         for agt, action in acts.items():
                             if agt.equals(agent):
+                                last_location = agt.location
                                 agt_actions.append(action)
                     agent.update_actions(agt_actions)
+                    # @TODO: Movement is not working
+                    agent.move(last_location)
 
                     # @TODO: Make only the agents that are in the path wait
                     self.__make_agents_wait(agent, conflicts)
