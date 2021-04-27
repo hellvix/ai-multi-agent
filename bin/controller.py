@@ -266,7 +266,7 @@ class Controller(object):
                 agent.move(agent.desire.location)  # location nearby box
                 conflicts = self.__check_conflicts(agent)
 
-                if conflicts:
+                if conflicts or agent.desire.is_box_desire():
                     print('Doing state-space search...', file=sys.stderr, flush=True)
                     _level = self.__downsize_level(agent)
                     list_actions = self.__solve_conflicts(
