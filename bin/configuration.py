@@ -140,9 +140,12 @@ class Configuration(object):
                 crow = loc.row
                 ccol = loc.col
                 loc.is_wall = raw_walls[crow][ccol]  # Whether location is wall
-
-                # We don't generate neighbors for walls
+                
                 if not loc.is_wall:
+                    # PRE-COMPUTED DISTANCES
+                    loc.build_distance_array(row_cnt, col_cnt)
+                    
+                    # NEIGHBORS
                     # Possible neigbohood locations
                     positions = (
                         (crow + 1, ccol),  # north

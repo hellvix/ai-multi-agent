@@ -1,3 +1,9 @@
+import numpy as np
+
+from math import sqrt
+
+from eprint import deb
+
 from actor import Actor
 
 
@@ -7,6 +13,7 @@ class Location(object):
     __neighbors = None
     is_wall = None
     _hash = None
+    __distances = None
     
     def __init__(self, row: int, col: int):
         self.__pos_row = row  # Y
@@ -14,6 +21,7 @@ class Location(object):
         self.__neighbors = None
         self.is_wall = None
         self._hash = None
+        self.__distances = None
 
     def __hash__(self):
         if self._hash is None:
@@ -48,6 +56,10 @@ class Location(object):
             return False
         
         return True
+    
+    @property
+    def distances(self):
+        return self.__distances
         
     @property
     def row(self):
@@ -66,28 +78,23 @@ class Location(object):
     @neighbors.setter
     def neighbors(self, value):
         self.__neighbors = value
-
-    def manhattan_distance(self, destination):
-        """ Manhattan distance from this location to destination
-            Important: when passing distances as tuples, remember to index them
-            just like Level.layout is index! That is, L1,1 is at index layout[0][0].
-        Args:
-            dest: either a tuple or Location
-
-        Returns:
-            int: distance
-        """
         
-        row, col = (
-            destination.row,
-            destination.col
-        ) if isinstance(
-            destination,
-            Location
-        ) else destination
-             
-        return abs(
-            self.row - row
-        ) + abs(
-            self.col - col
-        )
+    def build_distance_array(self, rows: int, cols: int):
+        """Precompute Euclidean distance for all parts of the map
+
+        Args:
+            rows (int): number of rows the level has
+            cols (int): number of cols the level has
+        """
+        self.__distances = np.zeros((rows, cols), dtype=int)
+        
+        for row in range(rows):
+            for col in range(cols):
+                self.__distances[row][col] = sqrt(
+                    (col - self.col)**2 + (row - self.row)**2
+                )
+        
+    def distance(self, location: 'Location'):
+        """Pre-computed distance from this location to Y.
+        """
+        return self.distances[location.row][location.col]

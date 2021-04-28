@@ -72,7 +72,7 @@ class Actor(object):
         self.__location = location
         
     def distance(self, location: 'Location') -> int:
-        return self.location.manhattan_distance(location)
+        return self.location.distance(location)
 
     @property
     def current_route(self):
