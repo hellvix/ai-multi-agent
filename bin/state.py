@@ -89,9 +89,8 @@ class State(object):
     @property
     def hrt_value(self):
         return self._g + \
-            self.__goal_count_heuristic() + \
-            self.__box_to_goal_heuristic() + \
-            self.__agent_to_box_heuristic()
+            self.__agent_to_box_heuristic() + \
+            self.__box_to_goal_heuristic()
     
     def move_box(self, rboxloc: Location, nloc: Location):
         """Change object in deepcopy
