@@ -201,7 +201,7 @@ class Controller(object):
         while True:
 
             iterations += 1
-            if iterations % 10000 == 0:
+            if iterations % 100 == 0:
                 memory.print_search_status(explored, frontier)
 
             if memory.get_usage() > memory._max_usage:
@@ -285,7 +285,7 @@ class Controller(object):
                                 last_location = agt.location
                                 agt_actions.append(action)
                     agent.update_actions(agt_actions)
-                    # @TODO: Movement is not working
+                    # @TODO: move is not working
                     agent.move(last_location)
 
                     # @TODO: Make only the agents that are in the path wait
