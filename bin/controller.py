@@ -436,7 +436,9 @@ class Controller(object):
                     continue
 
                 if child.is_wall:
-                    print('Path: {}'.format('WALL ALERT! retard'), file=sys.stderr, flush=True)
+                    continue
+
+                if not self.__is_location_free(child):
                     continue
                     
                 child_h = abs(child.col - end.col) + abs(child.row - end.row)
