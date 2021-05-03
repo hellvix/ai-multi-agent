@@ -42,7 +42,7 @@ class Controller(object):
         # Based on these destinations, agents will update their desire
 
         for agent in self.__agents:
-            agent.goals = self.__destination_for_agent(agent)
+            agent.goals = self.__goal_for_agent(agent)
             
         for box in self.__boxes:
             box.destination = self.__destination_for_box(box)
@@ -70,7 +70,7 @@ class Controller(object):
         other_routes = {loc: agt for agt in self.__agents for loc in agt.current_route if not agt.equals(agent)}
         box_locations = {box.location: self.get_box_owner(box) for box in self.__boxes}
         agent_locations = {agt.location: agt for agt in self.__agents if not agt.equals(agent)}
-        _actors = set()
+        _actors = {}
         
         for loc in route:
             if loc.is_wall:
@@ -228,14 +228,35 @@ class Controller(object):
             expanded = state.get_expanded_states()
 
             for n in expanded:
-                if not ((n.hrt_value, n) in frontier.queue or n in explored):
-                    frontier.put((n.hrt_value, n))
+                if not ((n.h, n) in frontier.queue or n in explored):
+                    frontier.put((n.h, n))
+                    
+    def __agent_scheduler(self):
+        """Define agents order in plan execution.
+        Agents with furthest objectives are put further down the queue        
+        """
+        agents = self.__agents
+        _pagts = PriorityQueue()
+        
+        for agt in agents:
+            _score = 0
+            for g in agt.goals:
+                # List of goals ranked by distance from agent to goal 
+                # and goal to destination, in case they are boxes
+                # Ideally, this shoudl be computed every time the agent moves, but we are 
+                # ignoring it for now
+                _score += agt.location.distance(g.location) + g.location.distance(g.destination)
+            _pagts.put((_score, agt))
+
+        return _pagts
+        
 
     def __planner(self):
         print('Planner initialized.', file=sys.stderr, flush=True)
 
         # Assign route for agents
-        agents = self.__agents
+        queued_agents = self.__agent_scheduler()
+        planned_agents = []
         boxes = self.__boxes
         conflicts = {
             'agents': [],
@@ -244,10 +265,11 @@ class Controller(object):
 
         # Computing route for each agent desire
         print('Generating initial plan for agents...', file=sys.stderr, flush=True)
-        for agent in agents:
+        while not queued_agents.empty():
+            _, agent = queued_agents.get()
             agent.update_desire()
 
-            if agent.desire_type == DesireType.MOVE_TO_GOAL:
+            if not agent.desire.is_sleep_desire():
                 destination = agent.desire.location
                 route = self.__find_path(agent.location, destination)
                 
@@ -257,18 +279,20 @@ class Controller(object):
                     agent.desire.location = route[-1:][0]
                     
                 agent.update_route(route)
+                planned_agents.append(agent)
         
-        for agent in agents:
+        for agent in planned_agents:
             print('Checking conflicts for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
             
             if agent.has_route():
                 actions = Controller.generate_move_actions(agent.current_route)
                 agent.update_actions(actions)
                 agent.move(agent.desire.location)  # location nearby box
+                agent.update_desire()
                 conflicts = self.__check_conflicts(agent)
 
-                if conflicts or agent.desire.is_box_desire():
-                    print('Doing state-space search...', file=sys.stderr, flush=True)
+                if conflicts or agent.desire.is_move_box_desire():
+                    print('Performing state-space search...', file=sys.stderr, flush=True)
                     _level = self.__downsize_level(agent)
                     list_actions = self.__solve_conflicts(
                         _level,
@@ -284,12 +308,15 @@ class Controller(object):
                             if agt.equals(agent):
                                 last_location = agt.location
                                 agt_actions.append(action)
+
                     agent.update_actions(agt_actions)
                     # @TODO: move is not working
                     agent.move(last_location)
+                    agent.update_desire()
 
                     # @TODO: Make only the agents that are in the path wait
                     self.__make_agents_wait(agent, conflicts)
+                    
                 print('Solving level...', file=sys.stderr, flush=True)
                 
         self.__equalize_actions()
@@ -340,7 +367,6 @@ class Controller(object):
         
         # Sanity check (routes must have the same length)
         sizes = [len(agent.actions) for agent in self.__agents]  # Size of all actions
-        deb(sizes)
         gsiz = groupby(sizes)
 
         if next(gsiz, True) and next(gsiz, False):
@@ -361,11 +387,8 @@ class Controller(object):
         # Code goes here
         self.__define_initial_destinations()
         self.__planner()
-        
-    def __destination_for_agents(self) -> [Location, ...]:
-        return {a: self.__destination_for_agent(a) for a in self.__agents}
     
-    def __destination_for_agent(self, agent: Agent) -> [Location, ...]:
+    def __goal_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
         """
         _goals = set()
@@ -380,10 +403,16 @@ class Controller(object):
         return _goals
 
     def __destination_for_box(self, box: Box) -> Location:
-        _dests = {loc for loc, goal in self.__goals.items() if goal.identifier == box.identifier}
+        _dests = PriorityQueue()
         
-        # If a box has more than one destination we only care about one
-        if _dests: return _dests.pop()
+        for loc, goal in self.__goals.items():
+            if goal.identifier == box.identifier:
+                dist = goal.location.distance(loc)
+                _dests.put((dist, loc))
+        
+        # If a box has more than one destination we only care about the closest
+        # @TODO: Can be improved
+        if _dests: return _dests.get()[1]
 
         return None
 

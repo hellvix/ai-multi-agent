@@ -1,0 +1,17 @@
+#domain
+hospital
+#levelname
+SimpleM
+#colors
+blue: 0,A,B,C
+#initial
++++++++++++++
++B         C+
++   0   A   +
++++++++++++++
+#goal
++++++++++++++
++           +
++ B      CAB+
++++++++++++++
+#end

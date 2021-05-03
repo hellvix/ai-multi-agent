@@ -52,11 +52,6 @@ class Agent(Actor):
         self.__actions = []
         self.clear_route()
     
-    def has_reached(self):
-        if not self.desire:
-            return True
-        return self.location in self.desire.location
-    
     def _get_goal(self):
         """Pop the first Goal from the list.
         
@@ -89,23 +84,49 @@ class Agent(Actor):
     def desire_type(self):
         return self.__desire.type
     
+    def is_desire_satisfied(self):
+        if self.desire.is_box_desire():
+            if self.desire.is_move_box_desire():
+                if self.desire.element.location == self.desire.element.destination:
+                    return True
+
+            elif self.desire.is_location_desire():
+                if self.location in self.desire.element.location.neighbors:
+                    return True
+            
+        elif self.desire.is_location_desire():
+            if self.location == self.desire.location:
+                return True
+            
+        elif self.desire.is_sleep_desire():
+            if self.location == self.desire.location:
+                return True
+        return False
+    
     def update_desire(self):
-        if not self._has_goals():
-            self.__desire = Desire(DesireType.SLEEP)
-        else:
+        if self.desire:
+            # Achieved desire?
+            if self.is_desire_satisfied():
+                if self.desire.is_location_desire():
+                    self.__desire = Desire(
+                        type=DesireType.MOVE_BOX_TO_GOAL,
+                        element=self.desire.element,
+                        location=self.desire.element.destination
+                    )
+                    return
+
+        if self._has_goals():
             _g = self._get_goal()
             self.__desire = Desire(
-                type=DesireType.MOVE_TO_GOAL,
-                obj=_g,
+                type=DesireType.MOVE_TO_LOCATION,
+                element=_g,
                 location=_g.location
             )
+            return
+        self.__desire = Desire(DesireType.SLEEP)
     
     def equals(self, other: 'Agent'):
         return self.identifier == other.identifier
         
     def move(self, location: Location):
         super().move(location)
-        
-        # All goals acomplished
-        if self._has_goals() and self.desire.location == location:
-            self.__desire = Desire(DesireType.SLEEP)

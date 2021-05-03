@@ -6,27 +6,41 @@ from location import Location
 @unique
 class DesireType(Enum):
     SLEEP = 0
-    MOVE_TO_GOAL = 1  # Location (Box or Goal), controller decides
+    MOVE_TO_LOCATION = 1  # Box location or destination
+    MOVE_BOX_TO_GOAL = 2
 
 
 class Desire(object):
-    def __init__(self, type: DesireType, obj=None, location=None):
+    def __init__(self, type: DesireType, element=None, location=None):
         self.__type = type
-        self.__object = obj  # Box or Goal
+        self.__element = element  # Box or Goal
         self.location = location
         
     def __str__(self):
         return '{} {} {}'.format(
             self.__type,
             self.location,
-            self.__object
+            self.__element
         )
         
     def __repr__(self):
         return self.__str__()
     
+    @property
+    def element(self):
+        return self.__element
+    
+    def is_sleep_desire(self):
+        return self.type == DesireType.SLEEP
+    
+    def is_location_desire(self):
+        return self.type == DesireType.MOVE_TO_LOCATION
+    
+    def is_move_box_desire(self):
+        return self.type == DesireType.MOVE_BOX_TO_GOAL
+    
     def is_box_desire(self):
-        return isinstance(self.__object, Box)
+        return isinstance(self.__element, Box)
     
     @property
     def type(self):

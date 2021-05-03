@@ -57,6 +57,9 @@ class Location(object):
         
         return True
     
+    def __lt__(self, other):
+        return (self.row + self.col) < (other.row + other.col)
+    
     @property
     def distances(self):
         return self.__distances

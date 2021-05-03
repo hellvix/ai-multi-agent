@@ -3,8 +3,8 @@ hospital
 #levelname
 WESDONKO
 #colors
-blue: 0, A
-red: 1, B
+blue: 0, A, F
+red: 1, B, E
 purple: 2, C
 brown: 3, D
 #initial
@@ -13,14 +13,16 @@ brown: 3, D
 +     +   +
 +++++ + +++
 +        B+
-+         +
++F        +
 +++++++   +
 +1    +  ++
 +     +   +
 +++++ +  D+
-+  C    +++
++E C    +++
 +         +
 + 2     3 +
++   ++++  +
++         +
 +++++++++++
 #goal
 +++++++++++
@@ -36,5 +38,7 @@ brown: 3, D
 +       +++
 +         +
 +         +
++   ++++  +
++    EF   +
 +++++++++++
 #end
