@@ -70,7 +70,7 @@ class Controller(object):
         other_routes = {loc: agt for agt in self.__agents for loc in agt.current_route if not agt.equals(agent)}
         box_locations = {box.location: self.get_box_owner(box) for box in self.__boxes}
         agent_locations = {agt.location: agt for agt in self.__agents if not agt.equals(agent)}
-        _actors = {}
+        _actors = set()
         
         for loc in route:
             if loc.is_wall:
@@ -363,7 +363,7 @@ class Controller(object):
             [Action, ...]: Agent actions
         """
         
-        # Sanity check (routes must have the same length)
+        # Sanity check (actions must have the same length)
         sizes = [len(agent.actions) for agent in self.__agents]  # Size of all actions
         gsiz = groupby(sizes)
 
