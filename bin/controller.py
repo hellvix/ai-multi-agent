@@ -241,10 +241,8 @@ class Controller(object):
         for agt in agents:
             _score = 0
             for g in agt.goals:
-                # List of goals ranked by distance from agent to goal 
-                # and goal to destination, in case they are boxes
-                # Ideally, this shoudl be computed every time the agent moves, but we are 
-                # ignoring it for now
+                # Agents are scheduled ascending 
+                # by distance from their location to their goal location
                 _score += agt.location.distance(g.location) + g.location.distance(g.destination)
             _pagts.put((_score, agt))
 
