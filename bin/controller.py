@@ -54,15 +54,86 @@ class Controller(object):
                 return agent
         raise Exception('Box has no owner (?).')
     
+    def __downsize_level(self, agent: Agent):
+        """Copy and modify the level according to the route.
+        
+        We cement out any location that:
+            1) is not in the route;
+            2) is not is a neighbor location in the route;
+            3) is not a wall;
+            4) is not a goal.
+            
+        The reason for this is to give the search a sub-set of the level,
+        so the search space is reduced. The reason not to blurry everything but the route
+        is that we want to ensure the agent has enough space to manouver in case this is necessary.
+        
+        Example with path from [L1,2, L2,2, L2,3] (0-based indexes):
+        
+        [x, x, x, x, x, x]
+        [x, -, -, -, x, x]
+        [-, -, -, -, -, x]
+        [x, -, -, -, x, x]
+        [x, x, x, x, x, x]
+        
+        x == wall
+        
+        At this point we assume the route given is achievable (__check_conflicts was called).
+        
+        Args:
+            route ([Location, ...]): List of locations leading from point A to B.
+            
+        Returns:
+            (Level): modified copy of the given level.
+        """
+
+        _level = self.__level.clone()
+
+        # SETS THAT DO NOT BECOME WALLS
+        boxes_neighbors = {
+            loc for box in self.__boxes for loc in box.location.neighbors if box.color == agent.color
+        }
+        boxes_routes = {
+            loc for box in self.__boxes for loc in box.current_route if box.color == agent.color
+        }
+        # Locations around goals the agent own. If another goal is found
+        # it must belong to the agent
+        goals_neighbors = {
+            loc for loc, goal in self.__goals.items() for loc in goal.location.neighbors
+            if goal.color == agent.color and not self.__is_goal(loc)
+        }
+        # Locations around the agent
+        agt_neighbors = {
+            loc for loc in agent.location.neighbors
+        }
+        current_route = {
+            loc for loc in agent.current_route
+        }
+
+        for row in _level.layout:
+            for loc in row:
+                # Location is not:
+                # 1) in the route;
+                # 2) is a neighbor location in the route;
+                # 3) is not already a wall.
+                # 4) Is not a goal
+                if not (
+                    loc in boxes_neighbors.union(
+                        boxes_routes,
+                        goals_neighbors,
+                        agt_neighbors,
+                        current_route
+                    ) or
+                    loc.is_wall
+                ):
+                    loc.is_wall = True
+        return _level
+    
     def __check_conflicts(self, agent: Agent):
         """Check for conflicts with the current agent's route.
-
         Args:
             agent (Agent): the agent to have its route checked.
-
         Raises:
             Exception: Exception if by mistake the given route has a wall.
-
         Returns:
             [list]: An empty list of agents with conflicting interests with the current route
         """
@@ -113,83 +184,8 @@ class Controller(object):
     def __is_location_free(self, location: 'Location'):
         return not location in self.occupied_locations
     
-    def __downsize_level(self, agent: Agent):
-        """Copy and modify the level according to the route.
-        
-        We cement out any location that:
-            1) is not in the route;
-            2) is not is a neighbor location in the route;
-            3) is not a wall;
-            4) is not a goal.
-            
-        The reason for this is to give the search a sub-set of the level,
-        so the search space is reduced. The reason not to blurry everything but the route
-        is that we want to ensure the agent has enough space to manouver in case this is necessary.
-        
-        Example with path from [L1,2, L2,2, L2,3] (0-based indexes):
-        
-        [x, x, x, x, x, x]
-        [x, -, -, -, x, x]
-        [-, -, -, -, -, x]
-        [x, -, -, -, x, x]
-        [x, x, x, x, x, x]
-        
-        x == wall
-        
-        At this point we assume the route given is achievable (__check_conflicts was called).
-        
-        Args:
-            route ([Location, ...]): List of locations leading from point A to B.
-            
-        Returns:
-            (Level): modified copy of the given level.
-        """
-        
-        _level = self.__level.clone()
-        
-        # SETS THAT DO NOT BECOME WALLS
-        boxes_neighbors = {
-            loc for box in self.__boxes for loc in box.location.neighbors if box.color == agent.color
-        }
-        boxes_routes = {
-            loc for box in self.__boxes for loc in box.current_route if box.color == agent.color
-        }
-        # Locations around goals the agent own. If another goal is found
-        # it must belong to the agent
-        goals_neighbors = {
-            loc for loc, goal in self.__goals.items() for loc in goal.location.neighbors \
-                if goal.color == agent.color and not self.__is_goal(loc)
-        }
-        # Locations around the agent
-        agt_neighbors = {
-            loc for loc in agent.location.neighbors
-        }
-        current_route = {
-            loc for loc in agent.current_route
-        }
-        
-        for row in _level.layout:
-            for loc in row:
-                # Location is not:
-                # 1) in the route;
-                # 2) is a neighbor location in the route;
-                # 3) is not already a wall.
-                # 4) Is not a goal
-                if not (
-                    loc in boxes_neighbors.union(
-                        boxes_routes,
-                        goals_neighbors,
-                        agt_neighbors,
-                        current_route
-                    ) or
-                    loc.is_wall
-                ):
-                    loc.is_wall = True
-        deb(_level)
-        return _level
-    
-    def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
-        """Solve conflicts in agents' routes using state space search
+    def __state_search(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
+        """State space for current agent's plan
         """
 
         frontier = PriorityQueue()
@@ -253,18 +249,11 @@ class Controller(object):
         print('Planner initialized.', file=sys.stderr, flush=True)
 
         # Assign route for agents
-        queued_agents = self.__agent_scheduler()
-        planned_agents = []
-        boxes = self.__boxes
-        conflicts = {
-            'agents': [],
-            'boxes': []
-        }
+        agents = self.__agents
 
         # Computing route for each agent desire
         print('Generating initial plan for agents...', file=sys.stderr, flush=True)
-        while not queued_agents.empty():
-            _, agent = queued_agents.get()
+        for agent in agents:
             agent.update_desire()
 
             if not agent.desire.is_sleep_desire():
@@ -277,22 +266,20 @@ class Controller(object):
                     agent.desire.location = route[-1:][0]
                     
                 agent.update_route(route)
-                planned_agents.append(agent)
         
-        for agent in planned_agents:
+        for agent in agents:
             print('Checking conflicts for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
             
             if agent.has_route():
                 actions = Controller.generate_move_actions(agent.current_route)
                 agent.update_actions(actions)
                 agent.move(agent.desire.location)  # location nearby box
-                agent.update_desire()
                 conflicts = self.__check_conflicts(agent)
 
-                if conflicts or agent.desire.is_move_box_desire():
-                    print('Performing state-space search...', file=sys.stderr, flush=True)
+                if conflicts or agent.desire.is_box_desire():
+                    print('Doing state-space search...', file=sys.stderr, flush=True)
                     _level = self.__downsize_level(agent)
-                    list_actions = self.__solve_conflicts(
+                    list_actions = self.__state_search(
                         _level,
                         np.array([agent]),
                         deepcopy(np.array([box for box in self.__boxes if box.color == agent.color]))
@@ -306,15 +293,12 @@ class Controller(object):
                             if agt.equals(agent):
                                 last_location = agt.location
                                 agt_actions.append(action)
-
                     agent.update_actions(agt_actions)
                     # @TODO: move is not working
                     agent.move(last_location)
-                    agent.update_desire()
 
                     # @TODO: Make only the agents that are in the path wait
                     self.__make_agents_wait(agent, conflicts)
-                    
                 print('Solving level...', file=sys.stderr, flush=True)
                 
         self.__equalize_actions()

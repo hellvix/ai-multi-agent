@@ -55,7 +55,7 @@ class State(object):
         return True
     
     def __lt__(self, other):
-        return self._g <= other._g
+        return self.h <= other.h
     
     def extract_actions(self) -> '[Action, ...]':
         plan = [None for _ in range(self._g)]

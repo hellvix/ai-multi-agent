@@ -99,13 +99,11 @@ class Agent(Actor):
                 return True
             
         elif self.desire.is_sleep_desire():
-            if self.location == self.desire.location:
-                return True
+            return True
         return False
     
     def update_desire(self):
         if self.desire:
-            # Achieved desire?
             if self.is_desire_satisfied():
                 if self.desire.is_location_desire():
                     self.__desire = Desire(
@@ -113,7 +111,9 @@ class Agent(Actor):
                         element=self.desire.element,
                         location=self.desire.element.destination
                     )
-                    return
+                    # The desire might have already been satisfied by solving
+                    # conflicts with other agents.
+                    self.update_desire()
 
         if self._has_goals():
             _g = self._get_goal()
@@ -123,7 +123,10 @@ class Agent(Actor):
                 location=_g.location
             )
             return
-        self.__desire = Desire(DesireType.SLEEP)
+        self.__desire = Desire(
+            DesireType.SLEEP,
+            location=self.location
+        )
     
     def equals(self, other: 'Agent'):
         return self.identifier == other.identifier
