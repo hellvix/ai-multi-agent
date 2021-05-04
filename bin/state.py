@@ -57,6 +57,9 @@ class State(object):
     def __lt__(self, other):
         return self.h <= other.h
     
+    def extract_actors(self) -> '[Actors, ...]':
+        return self.__agents, self.__boxes
+    
     def extract_actions(self) -> '[Action, ...]':
         plan = [None for _ in range(self._g)]
         state = self

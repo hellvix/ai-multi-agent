@@ -3,15 +3,22 @@ hospital
 #levelname
 SimpleM
 #colors
-blue: 0,A,B,C
+blue: 0,A
+red: 1,B
 #initial
 +++++++++++++
-+B         C+
-+   0   A   +
++           +
++    0   A  +
++           +
++   1       +
++B          +
 +++++++++++++
 #goal
 +++++++++++++
 +           +
-+ B      CAB+
++           +
++          A+
++           +
++          B+
 +++++++++++++
 #end

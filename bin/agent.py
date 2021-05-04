@@ -113,7 +113,9 @@ class Agent(Actor):
                     )
                     # The desire might have already been satisfied by solving
                     # conflicts with other agents.
-                    self.update_desire()
+                    return self.update_desire()
+            else: 
+                return
 
         if self._has_goals():
             _g = self._get_goal()
@@ -129,7 +131,7 @@ class Agent(Actor):
         )
     
     def equals(self, other: 'Agent'):
-        return self.identifier == other.identifier
+        return self.identifier == other.identifier and isinstance(other, Agent)
         
     def move(self, location: Location):
         super().move(location)

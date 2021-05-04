@@ -14,13 +14,15 @@ class Desire(object):
     def __init__(self, type: DesireType, element=None, location=None):
         self.__type = type
         self.__element = element  # Box or Goal
+        # Where the agent wants to be
+        # Should not be the same location as element
         self.location = location
         
     def __str__(self):
-        return '{} {} {}'.format(
+        return "{} {} {}".format(
             self.__type,
             self.location,
-            self.__element
+            self.__element or ''
         )
         
     def __repr__(self):

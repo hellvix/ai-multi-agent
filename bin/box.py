@@ -31,6 +31,9 @@ class Box(Actor):
             return False
 
         return super().__eq__(value)
+    
+    def equals(self, other: 'Box'):
+        return self.identifier == other.identifier and isinstance(other, Box)
 
     @property
     def current_route(self):
