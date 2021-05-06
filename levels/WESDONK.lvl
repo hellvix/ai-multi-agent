@@ -1,7 +1,7 @@
 #domain
 hospital
 #levelname
-WESDONKO
+WESDONK
 #colors
 blue: 0, A, E
 red: 1, B
@@ -27,7 +27,7 @@ brown: 3, D
 +     +  A+
 +     +  B+
 +++++ + +++
-+         +
++E        +
 +         +
 +++++++  C+
 +        ++
@@ -35,6 +35,6 @@ brown: 3, D
 +++++++   +
 +       +++
 +         +
-+E        +
++         +
 +++++++++++
 #end

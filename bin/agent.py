@@ -12,7 +12,7 @@ class Agent(Actor):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__goals = set()
+        self.__goals = []
         self.__desire = None
         self.__actions = []
         
@@ -53,28 +53,27 @@ class Agent(Actor):
         self.clear_route()
     
     def _get_goal(self):
-        """Pop the first Goal from the list.
+        """Get the first Goal from the list.
         
         @IMPORTANT: The goal is removed from the list!
         """
-        return self.__goals.pop()
+        _g = self.__goals[0]
+        self.__goals.remove(_g)
+        return _g
 
-    def add_goal(self, goal: Goal):
-        self.__goals.add(goal)
+    def add_goal(self, goal):
+        self.__goals.append(goal)
         
     @property
-    def goals(self) -> set:
+    def goals(self) -> list:
         return self.__goals
     
     @goals.setter
-    def goals(self, goals: set):
-        # When we set new goals we update the desire
-        if not isinstance(goals, set):
-            raise Exception('Attribute goals must be of type set.')
+    def goals(self, goals):
         self.__goals = goals
 
     def _has_goals(self) -> bool:
-        return not self.__goals == set()
+        return self.__goals
     
     @property
     def desire(self):
@@ -106,14 +105,15 @@ class Agent(Actor):
         if self.desire:
             if self.is_desire_satisfied():
                 if self.desire.is_location_desire():
-                    self.__desire = Desire(
-                        type=DesireType.MOVE_BOX_TO_GOAL,
-                        element=self.desire.element,
-                        location=self.desire.element.destination
-                    )
-                    # The desire might have already been satisfied by solving
-                    # conflicts with other agents.
-                    return self.update_desire()
+                    if self.desire.is_box_desire():
+                        self.__desire = Desire(
+                            type=DesireType.MOVE_BOX_TO_GOAL,
+                            element=self.desire.element,
+                            location=self.desire.element.destination
+                        )
+                        # The desire might have already been satisfied by solving
+                        # conflicts with other agents. Checking again.
+                        return self.update_desire()
             else: 
                 return
 

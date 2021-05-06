@@ -5,8 +5,8 @@ from eprint import deb
 class Box(Actor):
     destination = None
     
-    def __init__(self, *args):
-        super().__init__(*args)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.destination = None
         
     def has_reached(self):
@@ -34,10 +34,3 @@ class Box(Actor):
     
     def equals(self, other: 'Box'):
         return self.identifier == other.identifier and isinstance(other, Box)
-
-    @property
-    def current_route(self):
-        return self.__current_route
-
-    def set_current_route(self, route: ['Location', ...]):
-        self.__current_route = route

@@ -17,10 +17,11 @@ from action import Action, ActionType
 
 
 class State(object):
-    def __init__(self, level: Level, agents: Agent, boxes: Box):
+    def __init__(self, level: Level, agents: Agent, boxes: Box, goals: Goal):
         self.__level = level
         self.__agents = agents
         self.__boxes = boxes
+        self.__goals = goals
         
         # Attributes
         self._joint_actions = None
@@ -68,19 +69,41 @@ class State(object):
             state = state._parent
         return plan
     
-    def __box_to_goal_rank(self):
+    def __penalty_for_placement(self):
+        """ Penalizes states where agents are standing where they should not
+        such as other agent's goals.
+        """
+        
+        PCONST = 100
+        penalty = 0
+        
+        if self.__boxes:
+            # Boxes are in their location
+            all_boxes_done = sum([box.has_reached() for box in self.__boxes])
+            
+            if all_boxes_done:
+                for agent in self.__agents:
+                    other_goals = {loc for loc, goal in self.__goals.items() if goal.color != agent.color}
+
+                    for agent in self.__agents:
+                        if agent.location in other_goals:
+                            penalty += PCONST
+        return penalty
+    
+    def __box_to_goal_heuristic(self):
         # Distance from box to its destination
         return sum(box.distance(box.destination) for box in self.__boxes)
     
-    def __agent_to_desire_rank(self):
+    def __agent_to_desire_heuristic(self):
         # Distance from agent to desire (either box or goal)
         return sum(agent.distance(agent.desire.location) for agent in self.__agents)
     
     @property
     def h(self):
         return self._g + \
-            self.__agent_to_desire_rank() + \
-            self.__box_to_goal_rank()
+            self.__agent_to_desire_heuristic() + \
+            self.__box_to_goal_heuristic() + \
+            self.__penalty_for_placement()
     
     def move_box(self, rboxloc: Location, nloc: Location):
         """Change object in deepcopy
@@ -148,8 +171,7 @@ class State(object):
             for agent in agents:
                 joint_action[agent] = applicable_actions[agent][actions_permutation[agent]]
             
-            if not self.__is_conflicting(joint_action):
-                expanded_states.append(self.__apply_action(joint_action))
+            expanded_states.append(self.__apply_action(joint_action))
 
             # Advance permutation.
             done = False
@@ -171,12 +193,14 @@ class State(object):
         return expanded_states
         
     def is_goal_state(self) -> 'bool':
-            
-        for box in self.__boxes:
-            if box.has_reached():
-                return True
         
-        return False
+        if self.__boxes.size:
+            for box in self.__boxes:
+                if box.location != box.destination:
+                    return False
+            return True
+        
+        return not sum(agent.distance(agent.desire.location) for agent in self.__agents)
     
     def __is_applicable(self, agent: Agent, action: 'Action') -> 'bool':
         if action.type is ActionType.NoOp:
@@ -200,9 +224,6 @@ class State(object):
                 return self.__is_location_free(location[1]) and self.__is_location_with_box(location[0], agent.color)
             except Exception:
                 return False
-
-    def __is_conflicting(self, joint_action: '[Action, ...]') -> 'bool':
-        return False
     
     def __is_location_with_box(self, location: Location, color: Color):
         # Checks whether location has box of same color
@@ -218,7 +239,7 @@ class State(object):
         agent_locations = set(agent.location for agent in self.__agents)
         box_locations = set(box.location for box in self.__boxes)
         
-        if location in agent_locations or location in box_locations:
+        if location in agent_locations.union(box_locations):
             return False
         
         return True

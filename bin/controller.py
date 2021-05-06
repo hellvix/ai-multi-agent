@@ -6,9 +6,10 @@ import client
 from queue import PriorityQueue
 
 from copy import deepcopy
+from eprint import deb
 
 from box import Box
-from eprint import deb
+from goal import Goal
 from state import State
 from color import Color
 from agent import Agent
@@ -46,7 +47,6 @@ class Controller(object):
             
         for box in self.__boxes:
             box.destination = self.__destination_for_box(box)
-            box.set_current_route(self.__find_path(box.location, box.destination))
             
     def get_box_owner(self, box: 'Box') -> 'Agent':
         for agent in self.__agents:
@@ -54,61 +54,31 @@ class Controller(object):
                 return agent
         raise Exception('Box has no owner (?).')
     
-    def __downsize_level(self, agent: Agent):
+    def __downsize_level(self, agent: 'Agent'):
         """Copy and modify the level according to the route.
-        
-        We cement out any location that:
-            1) is not in the route;
-            2) is not is a neighbor location in the route;
-            3) is not a wall;
-            4) is not a goal.
-            
-        The reason for this is to give the search a sub-set of the level,
-        so the search space is reduced. The reason not to blurry everything but the route
-        is that we want to ensure the agent has enough space to manouver in case this is necessary.
-        
-        Example with path from [L1,2, L2,2, L2,3] (0-based indexes):
-        
-        [x, x, x, x, x, x]
-        [x, -, -, -, x, x]
-        [-, -, -, -, -, x]
-        [x, -, -, -, x, x]
-        [x, x, x, x, x, x]
-        
-        x == wall
-        
-        At this point we assume the route given is achievable (__check_conflicts was called).
-        
-        Args:
-            route ([Location, ...]): List of locations leading from point A to B.
-            
-        Returns:
-            (Level): modified copy of the given level.
         """
-
         _level = self.__level.clone()
-
-        other_boxes = {
-            box.location for box in self.__boxes if agent.desire.element != box
-        }
-        # Locations around the agent
-        other_agt_positions = {
-            agt.location for agt in self.__agents if not agt.equals(agent)
-        }
-
-        for row in _level.layout:
-            for loc in row:
-                # Location is not:
-                # 1) in the route;
-                # 2) is a neighbor location in the route;
-                # 3) is not already a wall.
-                # 4) Is not a goal
-                if loc in other_boxes.union(
-                    other_agt_positions
+        _goals = self.__goals
+        
+        agent_locations = {agent.location for agent in self.__agents}
+        box_locations = {box.location for box in self.__boxes if box != agent.desire.element}
+        goal_locations = {loc for loc, goal in self.__goals.items() if goal.color != agent.color}
+        
+        layout = deepcopy(_level.layout)
+        
+        for row in layout:
+            for rloc in row:
+                if rloc in agent_locations.union(
+                    box_locations,
+                    goal_locations
                 ):
-                    loc.is_wall = True
-        deb(_level)
-        return _level
+                    rloc.is_wall = True
+                    
+        _level.__layout = layout
+        _agents = deepcopy(np.array([agent]))
+        _boxes = deepcopy(np.array([agent.desire.element] if self.__strategy != StrategyType.AGENTS else []))
+        
+        return _level, _agents, _boxes, _goals
     
     def __check_conflicts(self, agent: Agent):
         """Check for conflicts with the current agent's route.
@@ -120,29 +90,35 @@ class Controller(object):
             [list]: An empty list of agents with conflicting interests with the current route
         """
         route = agent.current_route
+        
         other_routes = {loc: agt for agt in self.__agents for loc in agt.current_route if not agt.equals(agent)}
-        box_locations = {box.location: self.get_box_owner(box) for box in self.__boxes}
+        box_locations = {box.location: box for box in self.__boxes}
         agent_locations = {agt.location: agt for agt in self.__agents if not agt.equals(agent)}
-        _actors = set()
+        _agents = set()
+        _boxes = set()
         
         for loc in route:
             if loc.is_wall:
                 raise Exception("The path is blocked by a wall (?). find_route broken?")
             
-            if loc != agent.location:
-                if loc in box_locations:
-                    oagt = box_locations[loc]
-                    if not oagt.equals(agent):
-                        _actors.add(box_locations[loc])
-                    
-                if loc in agent_locations:
-                    _actors.add(agent_locations[loc])
+            if loc in box_locations:
+                box = box_locations[loc]
+                oagt = self.get_box_owner(box)
+                _boxes.add(box)
+                if not oagt.equals(agent):
+                    _agents.add(box_locations[loc])
                 
-                if loc in other_routes:
-                    _actors.add(other_routes[loc])
+            if loc in agent_locations:
+                _agents.add(agent_locations[loc])
+            
+            if loc in other_routes:
+                _agents.add(other_routes[loc])
                     
-        print('Conflicts found: ', _actors or 'None', file=sys.stderr, flush=True)
-        return _actors
+        print('Conflicts found: ', _agents.union(_boxes) or 'None', file=sys.stderr, flush=True)
+        
+        if _agents or _boxes:
+            return list(_agents), list(_boxes)
+        
     
     def __is_goal(self, location: 'Location'):
         """Check whether the given position is a goal
@@ -166,14 +142,14 @@ class Controller(object):
     def __is_location_free(self, location: 'Location'):
         return not location in self.occupied_locations
     
-    def __state_search(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
+    def __state_search(self, level: Level, agents: [Agent, ...], boxes: [Box, ...], goals: [Goal, ...]):
         """State space for current agent's plan
         """
 
         frontier = PriorityQueue()
         iterations = 0
         # frontier = set of all leaf nodes available for expansion
-        frontier.put((0, State(level, agents, boxes)))
+        frontier.put((0, State(level, agents, boxes, goals)))
         explored = set()
         
         while True:
@@ -206,8 +182,9 @@ class Controller(object):
             expanded = state.get_expanded_states()
 
             for n in expanded:
-                if not ((n.h, n) in frontier.queue or n in explored):
-                    frontier.put((n.h, n))
+                rnode = n.h, n
+                if not (rnode in frontier.queue or n in explored):
+                    frontier.put(rnode)
                     
     def __agent_scheduler(self):
         """Define agents order in plan execution.
@@ -232,7 +209,6 @@ class Controller(object):
 
         # Assign route for agents
         agents = self.__agents
-        
         agents_desire = True
         
         while agents_desire:
@@ -261,61 +237,71 @@ class Controller(object):
                 
                 if not agent.desire.is_sleep_desire():
                     conflicts = self.__check_conflicts(agent)
+
+                    # @TODO: Try to move the agent where the conflict starts
+                    print('No conflicts in partial route for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
+                    actions = Controller.generate_move_actions(agent.current_route)
+                    agent.update_actions(actions)
                     
-                    if not conflicts:
-                        print('No conflicts in partial route for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
-                        actions = Controller.generate_move_actions(agent.current_route)
-                        agent.update_actions(actions)
-                        agent.move(agent.desire.location)  # location nearby box
-                        agent.update_desire()
-                    else:
-                        print('Conflict found in route. Skipping to state search.' % agent.identifier, file=sys.stderr, flush=True)
+                    # Last location from actions
+                    last_loc = self.__location_from_actions(agent.location, actions)
+                    agent.move(last_loc)  # location nearby box
+                    agent.update_desire()
                     
-                    print('Performing space search...', file=sys.stderr, flush=True)
-                    _level = self.__downsize_level(agent)
-                    list_actors, list_actions = self.__state_search(
-                        _level,
-                        np.array(deepcopy([agent])),
-                        np.array(deepcopy([agent.desire.element]))
-                    )
+                    print('Performing state search...', file=sys.stderr, flush=True)
+                    list_actors, list_actions = self.__state_search(*self.__downsize_level(agent))
                     state_agents, state_boxes = list_actors
                     print('Extracting plan...', file=sys.stderr, flush=True)
                     
                     # Extracting actions
                     agt_actions = []
-                    last_location = None
                     for acts in list_actions:
                         for agt, action in acts.items():
                             if agt.equals(agent):
-                                last_location = agt.location
                                 agt_actions.append(action)
+                                
+                    # Updating results from state
+                    for a in state_agents:
+                        for agt in self.__agents:
+                            if a.equals(agt):
+                                agt.move(a.location)
+                                agent.update_desire()
 
                     # Moving boxes from result in state
                     for b in state_boxes:
                         for box in self.__boxes:
                             if b.equals(box):
                                 box.move(b.location)
-                                
-                    agent.update_actions(agt_actions)
-                    # @TODO: move is not working
-                    agent.move(last_location)
-                    agent.update_desire()
 
-                    # @TODO: Make only the agents that are in the path wait
-                    self.__make_agents_wait(agent, conflicts)
+                    agent.update_actions(agt_actions)
+                    
+                    if conflicts:
+                        self.__make_agents_wait(agent, conflicts[1])
                     
             # Are agents satisfied?
-            deb('AGENT DESIRE:',{agent: agent.desire for agent in agents})
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
         # DONE
         print('Solving level...', file=sys.stderr, flush=True)
         self.__equalize_actions()
         client.Client.send_to_server(self.__assemble())
-    
+        
+    def __location_from_actions(self, initial_loc: 'Location', actions: '[Action, ...]', return_plan=False):
+        plan = []
+        last_loc = initial_loc
+        
+        for act in actions:
+            last_loc = self.__level.location_from_action(last_loc, act)
+            plan.append(last_loc)
+        
+        if return_plan:
+            last_loc, plan
+
+        return last_loc
+        
     def __equalize_actions(self):
-        """ Usually called after generating actions for the agents. 
+        """ Usually called after generating all actions for the agents. 
         This method ensures all agents have the same length in actions. 
-        The difference is filled with NoOp actions.
+        The difference is filled with NoOp.
         """
         # Equalize actions size
         agents = self.__agents
@@ -341,12 +327,10 @@ class Controller(object):
             agent (Agent): The agent we derive the waiting from.
         """
         
-        for other_agt in self.__agents:
-            if not other_agt.equals(agent) and other_agt in agents:
-                sz_dif = len(agent.actions) - len(other_agt.actions)
-                if sz_dif > 0:
-                    other_agt.update_actions([Action.NoOp for _ in range(sz_dif)])
-        return
+        for other_agt in agents:
+            sz_dif = len(agent.actions) - len(other_agt.actions)
+            if sz_dif > 0:
+                other_agt.update_actions([Action.NoOp for _ in range(sz_dif)])
 
     def __assemble(self) -> [Action, ...]:
         """Gather agents actions so they can be streamlined to the server
@@ -381,16 +365,20 @@ class Controller(object):
     def __goal_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
         """
-        _goals = set()
+        _goals = PriorityQueue()
         if self.__strategy == StrategyType.AGENTS:
             for loc, goal in self.__goals.items():
                 if goal.color == agent.color:
-                    _goals.add(goal)
+                    _goals.put((agent.distance(loc), goal))
         else:
             for box in self.__boxes:
                 if box.color == agent.color:
-                    _goals.add(box)
-        return _goals
+                    _goals.put((agent.distance(box.location), box))
+        
+        f_goal = []        
+        while not _goals.empty():
+            f_goal.append(_goals.get()[1])
+        return f_goal
 
     def __destination_for_box(self, box: Box) -> Location:
         _dests = PriorityQueue()
@@ -455,7 +443,7 @@ class Controller(object):
                     continue
 
                 if child.is_wall:
-                    print('Path: {}'.format('WALL ALERT! retard'), file=sys.stderr, flush=True)
+                    print('Path: {}'.format('WALL ALERT! retard %s' % child), file=sys.stderr, flush=True)
                     continue
                     
                 child_h = abs(child.col - end.col) + abs(child.row - end.row)

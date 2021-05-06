@@ -68,7 +68,7 @@ class Actor(object):
         from location import Location
 
         if not isinstance(location, Location):
-            raise Exception('Parameter location must be an instance of Location.')
+            raise Exception('Parameter location must be an instance of Location, not %s.' % type(location))
         self.__location = location
         
     def distance(self, location: 'Location') -> int:

@@ -112,7 +112,7 @@ class Level(object):
         """If we apply an action in a specific location, which locations do we get in return?
 
         Args:
-            location (Location): location we apply the action to
+            location (Location): location where we start
             action (Action): Move, Pull or Push
             execute (bool): If true, return the location as if the action was executed
             

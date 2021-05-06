@@ -28,6 +28,8 @@ class Location(object):
             prime = 31
             _hash = 1
             _hash = _hash * prime + hash(self.__str__())
+            if self.__neighbors:
+                _hash = _hash * prime + hash(tuple(loc for loc in self.__neighbors))
             _hash = _hash * prime + hash((self.row, self.col))
             self._hash = _hash
         return self._hash

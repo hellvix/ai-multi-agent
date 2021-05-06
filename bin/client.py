@@ -108,7 +108,7 @@ class Client(object):
         # Send client name to server.
         if hasattr(sys.stdout, "reconfigure"):
             sys.stdout.reconfigure(encoding='ASCII')
-        print('Client', flush=True)
+        print('WESDONK', flush=True)
         
         # Parse the level.
         server_messages = sys.stdin
