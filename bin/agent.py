@@ -119,6 +119,7 @@ class Agent(Actor):
 
         if self._has_goals():
             _g = self._get_goal()
+            
             self.__desire = Desire(
                 type=DesireType.MOVE_TO_LOCATION,
                 element=_g,

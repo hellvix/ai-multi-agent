@@ -36,6 +36,7 @@ class Controller(object):
     def __parse_config__(self, configuration: Configuration):
         """Parses Configuration into data structure with objects
         """
+        print('Parsing configuration.', file=sys.stderr, flush=True)
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
         self.__strategy = configuration.strategy_type
                    
@@ -220,15 +221,21 @@ class Controller(object):
 
                 if not agent.desire.is_sleep_desire():
                     print('Creating route for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
+                    deb(agent, agent.desire)
                     destination = agent.desire.location
                     route = self.__find_route(agent.location, destination)
 
+                    # Update the desire in case boxes are involved
                     if agent.desire.is_box_desire():
-                        # Avoid sending the last location (box is standing there)
+                        # The agent is tanding too close to where it wants to go
                         if len(route) == 1:
-                            agent.desire.location = route[0]
+                            route = [agent.location, ]
+                            agent.desire.location = agent.location
+                        # Avoid sending the last location (box is standing there)
                         else:
+                            deb(route)
                             route = route[:-1]
+                            deb(route)
                             agent.desire.location = route[-1:][0]
 
                     agent.update_route(route)
@@ -277,7 +284,7 @@ class Controller(object):
                     agent.update_actions(agt_actions)
                     
                     if conflicts:
-                        self.__make_agents_wait(agent, conflicts[1])
+                        self.__make_agents_wait(agent, conflicts[0])
                     
             # Are agents satisfied?
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
@@ -442,14 +449,17 @@ class Controller(object):
 
             if visited == end:
                 pnode = vparent
-                path = []
+                path = [end, ]
                 
                 while pnode:
                     loc = pnode.location
                     path.append(loc)
                     pnode = pnode.parent
                     
+                # Revert
                 _r = path[::-1]
+                # Ignore the first position (start)
+                #_r = _r[1:]
                 self.__cached_routes.update({_rhash: _r})
                 self.__find_route(start, end)
                 return _r
