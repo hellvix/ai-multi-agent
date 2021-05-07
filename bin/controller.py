@@ -31,6 +31,7 @@ class Controller(object):
     def __init__(self, configuration: Configuration):
         print('Controller initialized.', file=sys.stderr, flush=True)
         self.__parse_config__(configuration)
+        self.__cached_routes = {}
     
     def __parse_config__(self, configuration: Configuration):
         """Parses Configuration into data structure with objects
@@ -220,7 +221,7 @@ class Controller(object):
                 if not agent.desire.is_sleep_desire():
                     print('Creating route for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
                     destination = agent.desire.location
-                    route = self.__find_path(agent.location, destination)
+                    route = self.__find_route(agent.location, destination)
 
                     if agent.desire.is_box_desire():
                         # Avoid sending the last location (box is standing there)
@@ -394,11 +395,12 @@ class Controller(object):
 
         return None
 
-    def __find_path(self, start: Location, end: Location):
-        """ Shanna's implementatoin of A*.
-        Finds the shorted path from A to B.
+    def __find_route(self, start: Location, end: Location):
+        """ Implementatoin of Greedy BFS
+        Finds a path from A to B.
         
         Author: Shanna
+        Co-author: Elvis (heapq && route caching)
 
         Args:
             start (Location): Start location
@@ -407,53 +409,58 @@ class Controller(object):
         Returns:
             [Location]: [Location, ...]
         """
-        open_list = []
-        closed_list = []
-        parent_list = [] # (child, parent)
+        
+        class Node(object):
+            location = None
+            parent = None
+            
+            def __init__(self, location, parent):
+                self.location = location
+                self.parent = parent
+            
+            def __lt__(self, other):
+                return self.location < other.location
+        
+        frontier = PriorityQueue()
+        frontier.put((start.distance(end), Node(start, None)))
+        explored = set()
+        _rhash = hash((start, end))
+        
+        try:
+            return self.__cached_routes[_rhash]
+        except KeyError:
+            pass
 
-        current_node = (start, 0)
-        open_list.append(current_node)
+        while True:
 
-        while len(open_list) > 0:
+            if frontier.empty():
+                raise Exception('Could not find path from %s to %s.' % (start, end))
 
-            current_node = open_list[0]
-            for item in open_list:
-                if item[1] < current_node[1]:
-                    current_node = item
+            distance, node = frontier.get()
+            visited = node.location
+            vparent = node.parent
 
-            open_list.remove(current_node)
-            closed_list.append(current_node)
-
-            if current_node[0] == end:
-
+            if visited == end:
+                pnode = vparent
                 path = []
-                current = current_node[0]
-                while current is not start:
-                    path.append(current)
-                    current = [node for node in parent_list if node[0] == current][0][1]
-
-                path.append(start)
-                return path[::-1]
                 
-            for child in current_node[0].neighbors:  
-
-                parent_list.append((child, current_node[0]))          
-
-                if child in [i[0] for i in closed_list]:
-                    continue
-
-                if child.is_wall:
-                    print('Path: {}'.format('WALL ALERT! retard %s' % child), file=sys.stderr, flush=True)
-                    continue
+                while pnode:
+                    loc = pnode.location
+                    path.append(loc)
+                    pnode = pnode.parent
                     
-                child_h = abs(child.col - end.col) + abs(child.row - end.row)
-                child_g = current_node[1] - child_h + 1
-                child_f = child_h + child_g
-                
-                if child in [i[0] for i in open_list] and child_f > [node for node in open_list if node[0] == child][0][1]:
-                    continue
-                
-                open_list.append((child, child_f))
+                _r = path[::-1]
+                self.__cached_routes.update({_rhash: _r})
+                self.__find_route(start, end)
+                return _r
+
+            explored.add(visited)
+            expanded = visited.neighbors
+
+            for loc in expanded:
+                nloc = loc.distance(end), Node(loc, node)
+                if not (nloc in frontier.queue or loc in explored):
+                    frontier.put(nloc)
 
     @staticmethod
     def generate_move_actions(path: '[Location, ...]') -> '[Actions, ...]':
