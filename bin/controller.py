@@ -221,7 +221,6 @@ class Controller(object):
 
                 if not agent.desire.is_sleep_desire():
                     print('Creating route for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
-                    deb(agent, agent.desire)
                     destination = agent.desire.location
                     route = self.__find_route(agent.location, destination)
 
@@ -233,9 +232,7 @@ class Controller(object):
                             agent.desire.location = agent.location
                         # Avoid sending the last location (box is standing there)
                         else:
-                            deb(route)
                             route = route[:-1]
-                            deb(route)
                             agent.desire.location = route[-1:][0]
 
                     agent.update_route(route)
