@@ -85,19 +85,17 @@ class Location(object):
         self.__neighbors = value
         
     def build_distance_array(self, rows: int, cols: int):
-        """Precompute Euclidean distance for all parts of the map
+        """Precompute Manhattan distance for all points
 
         Args:
-            rows (int): number of rows the level has
-            cols (int): number of cols the level has
+            rows (int): real number of rows the level has
+            cols (int): real number of cols the level has
         """
         self.__distances = np.zeros((rows, cols), dtype=int)
         
         for row in range(rows):
             for col in range(cols):
-                self.__distances[row][col] = sqrt(
-                    (col - self.col)**2 + (row - self.row)**2
-                )
+                self.__distances[row][col] = abs(col - self.col) + abs(row - self.row)
         
     def distance(self, location: 'Location'):
         """Pre-computed distance from this location to Y.

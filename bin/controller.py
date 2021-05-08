@@ -2,6 +2,8 @@ import sys
 import time
 import memory
 import client
+import logging
+import numpy as np
 
 from queue import PriorityQueue
 
@@ -21,8 +23,7 @@ from configuration import Configuration, StrategyType
 
 from itertools import groupby
 
-import numpy as np
-
+log = logging.getLogger(__name__)
 
 globals().update(Action.__members__)
 
@@ -30,31 +31,50 @@ globals().update(Action.__members__)
 class Controller(object):
     def __init__(self, configuration: Configuration):
         print('Controller initialized.', file=sys.stderr, flush=True)
+        log.debug('Controller initialized.')
+        
         self.__parse_config__(configuration)
         self.__cached_routes = {}
     
     def __parse_config__(self, configuration: Configuration):
         """Parses Configuration into data structure with objects
         """
-        print('Parsing configuration.', file=sys.stderr, flush=True)
+        __debug_msg = 'Parsing configuration.'
+        print(__debug_msg, file=sys.stderr, flush=True)
+        log.debug(__debug_msg)
+        
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
         self.__strategy = configuration.strategy_type
+        
+        __debug_msg = 'Parsing Finished.'
+        print(__debug_msg, file=sys.stderr, flush=True)
+        log.debug(__debug_msg)
                    
     def __define_initial_destinations(self):
         # Define initial destination for actors
         # Based on these destinations, agents will update their desire
+        log.debug("Checking initial destinations...")
 
-        for agent in self.__agents:
-            agent.goals = self.__goal_for_agent(agent)
-            
+        # @ATTENTION: DO NOT CHANGE THE ORDERING BELOW
+                
+        # 1) First we find destination for the boxes
         for box in self.__boxes:
             box.destination = self.__destination_for_box(box)
+            
+        # 2) Based on 1, we find goals for the agents
+        for agent in self.__agents:
+            agent.goals = self.__goal_for_agent(agent)
+        
+        log.debug("Finished initial destinations.")
             
     def get_box_owner(self, box: 'Box') -> 'Agent':
         for agent in self.__agents:
             if agent.color == box.color:
                 return agent
-        raise Exception('Box has no owner (?).')
+        
+        __err = '%s has no owner (?).' % box
+        log.error(__err)
+        raise Exception(__err)
     
     def __downsize_level(self, agent: 'Agent'):
         """Copy and modify the level according to the route.
@@ -101,7 +121,9 @@ class Controller(object):
         
         for loc in route:
             if loc.is_wall:
-                raise Exception("The path is blocked by a wall (?). find_route broken?")
+                __err = "The path is blocked by a wall (?). find_route broken?"
+                log.error(__err)
+                raise Exception(__err)
             
             if loc in box_locations:
                 box = box_locations[loc]
@@ -116,7 +138,9 @@ class Controller(object):
             if loc in other_routes:
                 _agents.add(other_routes[loc])
                     
-        print('Conflicts found: ', _agents.union(_boxes) or 'None', file=sys.stderr, flush=True)
+        __debug_msg = 'Conflicts found: %s' % (_agents.union(_boxes) or 'None')
+        log.debug(__debug_msg)
+        print(__debug_msg, file=sys.stderr, flush=True)
         
         if _agents or _boxes:
             return list(_agents), list(_boxes)
@@ -141,7 +165,20 @@ class Controller(object):
             box_loc
         )
     
-    def __is_location_free(self, location: 'Location'):
+    def __is_location_free(self, location: 'Location', ignoring: {'Location', ...}):
+        """Check whether a location is free. As parameter, a list of ignored locations can be given.
+        This is useful if we are checking locations systematically, such as in find_route.
+
+        Args:
+            location (Location): Location to be checked
+            ignoring ([type]): Set of locations to be ignored
+
+        Returns:
+            [boolean]: Location status
+        """
+        # Check whether this location should be ignored
+        if location in ignoring: return True
+        
         return not location in self.occupied_locations
     
     def __state_search(self, level: Level, agents: [Agent, ...], boxes: [Box, ...], goals: [Goal, ...]):
@@ -167,7 +204,9 @@ class Controller(object):
 
             # if the frontier is empty then return failure
             if frontier.empty():
-                raise Exception('Could not solve conflicts. Problem infeasible?')
+                __err = "Could not solve conflicts. Problem infeasible?"
+                log.error(__err)
+                raise Exception(__err)
 
             # choose a leaf node and remove it from the frontier
             rank, state = frontier.get()
@@ -185,7 +224,7 @@ class Controller(object):
 
             for n in expanded:
                 rnode = n.h, n
-                if not (rnode in frontier.queue or n in explored):
+                if not rnode in frontier.queue and not n in explored:
                     frontier.put(rnode)
                     
     def __agent_scheduler(self):
@@ -207,7 +246,9 @@ class Controller(object):
         
 
     def __planner(self):
-        print('Planner initialized.', file=sys.stderr, flush=True)
+        __debug_msg = 'Planner initialized.'
+        print(__debug_msg, file=sys.stderr, flush=True)
+        log.debug(__debug_msg)
 
         # Assign route for agents
         agents = self.__agents
@@ -216,11 +257,17 @@ class Controller(object):
         while agents_desire:
             # Derive move actions
             for agent in agents:
-                print('Checking desire for Agent %s ...' % agent.identifier, file=sys.stderr, flush=True)
+                __debug_msg = 'Checking desire for Agent %s ...' % agent.identifier
+                log.debug(__debug_msg)
+                print(__debug_msg, file=sys.stderr, flush=True)
+                
                 agent.update_desire()
 
                 if not agent.desire.is_sleep_desire():
-                    print('Creating route for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
+                    __debug_msg = 'Creating route for Agent %s...' % agent.identifier
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
                     destination = agent.desire.location
                     route = self.__find_route(agent.location, destination)
 
@@ -238,13 +285,18 @@ class Controller(object):
                     agent.update_route(route)
         
             for agent in agents:
-                print('Checking route conflicts for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
+                __debug_msg = 'Checking route conflicts for Agent %s...' % agent.identifier
+                log.debug(__debug_msg)
+                print(__debug_msg, file=sys.stderr, flush=True)
                 
                 if not agent.desire.is_sleep_desire():
                     conflicts = self.__check_conflicts(agent)
 
                     # @TODO: Try to move the agent where the conflict starts
-                    print('No conflicts in partial route for Agent %s...' % agent.identifier, file=sys.stderr, flush=True)
+                    __debug_msg = 'No conflicts in partial route for Agent %s...' % agent.identifier
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
                     actions = Controller.generate_move_actions(agent.current_route)
                     agent.update_actions(actions)
                     
@@ -253,10 +305,16 @@ class Controller(object):
                     agent.move(last_loc)  # location nearby box
                     agent.update_desire()
                     
-                    print('Performing state search...', file=sys.stderr, flush=True)
+                    __debug_msg = "Performing state search..."
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
                     list_actors, list_actions = self.__state_search(*self.__downsize_level(agent))
                     state_agents, state_boxes = list_actors
-                    print('Extracting plan...', file=sys.stderr, flush=True)
+                    
+                    __debug_msg = 'Extracting plan...'
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
                     
                     # Extracting actions
                     agt_actions = []
@@ -286,7 +344,11 @@ class Controller(object):
             # Are agents satisfied?
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
         # DONE
-        print('Solving level...', file=sys.stderr, flush=True)
+        
+        __debug_msg = 'Solving level...'
+        log.debug(__debug_msg)
+        print(__debug_msg, file=sys.stderr, flush=True)
+        
         self.__equalize_actions()
         client.Client.send_to_server(self.__assemble())
         
@@ -349,8 +411,10 @@ class Controller(object):
         gsiz = groupby(sizes)
 
         if next(gsiz, True) and next(gsiz, False):
+            __err = "List of Actions for agents does not have the same size."
+            log.error(__err)
             raise Exception(
-                'List of Actions for agents does not have the same size.'
+                __err
             )
         
         acts_sz = len(self.__agents[0].actions)  # number of actions
@@ -364,20 +428,23 @@ class Controller(object):
 
     def deploy(self) -> [Action, ...]:
         # Code goes here
+        log.debug("Deploying...")
         self.__define_initial_destinations()
         self.__planner()
+        log.debug("Finished deploying.")
     
     def __goal_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
         """
         _goals = PriorityQueue()
+        
         if self.__strategy == StrategyType.AGENTS:
             for loc, goal in self.__goals.items():
                 if goal.color == agent.color:
                     _goals.put((agent.distance(loc), goal))
         else:
             for box in self.__boxes:
-                if box.color == agent.color:
+                if box.destination and box.color == agent.color:
                     _goals.put((agent.distance(box.location), box))
         
         f_goal = []        
@@ -386,17 +453,22 @@ class Controller(object):
         return f_goal
 
     def __destination_for_box(self, box: Box) -> Location:
+        log.debug("Finding destination for boxes.")
+        
         _dests = PriorityQueue()
-        
+        other_destinations = set(box.destination for box in self.__boxes if box.destination)
+
         for loc, goal in self.__goals.items():
-            if goal.identifier == box.identifier:
-                dist = goal.location.distance(loc)
+            if not loc in other_destinations and goal.identifier == box.identifier:
+                dist = box.location.distance(goal.location)
                 _dests.put((dist, loc))
+                
+                log.debug("%s destination is %s, with distance %d." % (box, goal, dist))
         
+        log.debug("Done finding destination for boxes.")
         # If a box has more than one destination we only care about the closest
         # @TODO: Can be improved
-        if _dests: return _dests.get()[1]
-
+        if not _dests.empty(): return _dests.get()[1]
         return None
 
     def __find_route(self, start: Location, end: Location):
@@ -429,6 +501,7 @@ class Controller(object):
         frontier.put((start.distance(end), Node(start, None)))
         explored = set()
         _rhash = hash((start, end))
+        _ignored = {start, end}
         
         try:
             return self.__cached_routes[_rhash]
@@ -438,19 +511,19 @@ class Controller(object):
         while True:
 
             if frontier.empty():
-                raise Exception('Could not find path from %s to %s.' % (start, end))
+                __err = "Could not find route from %s to %s." % (start, end)
+                log.error(__err)
+                raise Exception(__err)
 
-            distance, node = frontier.get()
+            _, node = frontier.get()
             visited = node.location
-            vparent = node.parent
 
             if visited == end:
-                pnode = vparent
-                path = [end, ]
+                pnode = node.parent
+                path = [visited, ]
                 
                 while pnode:
-                    loc = pnode.location
-                    path.append(loc)
+                    path.append(pnode.location)
                     pnode = pnode.parent
                     
                 # Revert
@@ -463,11 +536,12 @@ class Controller(object):
 
             explored.add(visited)
             expanded = visited.neighbors
-
+            
             for loc in expanded:
-                nloc = loc.distance(end), Node(loc, node)
-                if not (nloc in frontier.queue or loc in explored):
-                    frontier.put(nloc)
+                if self.__is_location_free(loc, _ignored):
+                    nnode = loc.distance(end), Node(loc, node)
+                    if not nnode in frontier.queue and not loc in explored:
+                        frontier.put(nnode)
 
     @staticmethod
     def generate_move_actions(path: '[Location, ...]') -> '[Actions, ...]':
@@ -503,7 +577,9 @@ class Controller(object):
                 path_y.append('same y')
 
             else:
-                raise Exception('Typo error: Agent cannot move 2 steps in y (rows) !')
+                __err = "Typo error: Agent cannot move 2 steps in y (rows) !"
+                log.error(__err)
+                raise Exception(__err)
 
         for xval in range(len(x) - 1):
 
@@ -517,7 +593,9 @@ class Controller(object):
                 path_x.append('same x')
 
             else:
-                raise Exception('Typo error: Agent cannot move 2 steps in x (columns) !')
+                __err = 'Typo error: Agent cannot move 2 steps in x (columns) !'
+                log.error(__err)
+                raise Exception(__err)
 
         for i, j in zip(path_y, path_x):
 
@@ -534,6 +612,7 @@ class Controller(object):
                 pass
 
             else:
-                raise Exception('Typo error: Agent cannot move diagonally / in both directions !')
+                __err = 'Typo error: Agent cannot move diagonally / in both directions !'
+                log.error(__err)
 
         return path_y

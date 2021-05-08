@@ -1,5 +1,6 @@
 import sys
 import time
+import logging
 
 import cProfile
 
@@ -10,9 +11,13 @@ from configuration import Configuration
 from controller import Controller
 
 
+log = logging.getLogger(__name__)
+
+
 class Client(object):
     @staticmethod
     def parse_level(server_messages) -> 'Configuration':
+        log.debug("Parsing messages from server...")
         # We can assume that the level file is conforming to specification, since the server verifies this.
         # Read domain.
         server_messages.readline() # #domain
@@ -20,7 +25,9 @@ class Client(object):
         
         # Read Level name.
         server_messages.readline() # #levelname
-        server_messages.readline() # <name>
+        __name = server_messages.readline() # <name>
+        
+        log.debug("Map name is: %s" % __name.replace("\n", ''))
         
         # Read colors.
         server_messages.readline() # #colors
@@ -89,6 +96,7 @@ class Client(object):
         
         # End.
         # line is currently "#end".
+        log.debug("Finished parsing messages from server.")
         return Configuration({
             'walls': walls,
             
@@ -110,6 +118,8 @@ class Client(object):
             sys.stdout.reconfigure(encoding='ASCII')
         print('WESDONK', flush=True)
         
+        log.debug("Sending client name to server...")
+        
         # Parse the level.
         server_messages = sys.stdin
         if hasattr(server_messages, "reconfigure"):
@@ -118,7 +128,9 @@ class Client(object):
         # Client returns raw data from the server
         configuration = Client.parse_level(server_messages)
         
-        print('Initializing controller...', file=sys.stderr, flush=True)
+        __debug_msg = 'Initializing controller...'
+        print(__debug_msg, file=sys.stderr, flush=True)
+        log.debug(__debug_msg)
         
         controller = Controller(configuration)
         controller.deploy()

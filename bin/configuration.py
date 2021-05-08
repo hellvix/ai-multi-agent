@@ -1,3 +1,5 @@
+import logging
+
 from eprint import deb
 
 import numpy as np
@@ -8,6 +10,9 @@ from level import Level
 from color import Color
 from location import Location
 from enum import Enum, unique
+
+
+log = logging.getLogger(__name__)
 
 
 @unique
@@ -55,6 +60,8 @@ class Configuration(object):
         Returns:
             dict: [description]
         """
+        log.debug("Building goals...")
+        
         _raw_goals = self.__raw_goals
         _goals = {}
         
@@ -76,9 +83,11 @@ class Configuration(object):
                         loc: Goal(gl_label, loc, color)
                     })
 
+        log.debug("Finished goals.")
         return _goals
     
     def __build_agents(self, level: Level) -> '[Agent, ...]':
+        log.debug("Building agents...")
         
         # Raw
         _agent_rows = self.__raw_agents[0]
@@ -95,9 +104,11 @@ class Configuration(object):
             
             _agents = np.append(_agents, Agent(a_id, a_loc, a_color))
 
+        log.debug("Finished agents.")
         return _agents
     
     def __build_boxes(self, level: Level) -> '[Box, ...]':
+        log.debug("Building boxes...")
                
         # Raw
         _box_positions = self.__raw_boxes
@@ -114,12 +125,15 @@ class Configuration(object):
                     b_color = _box_colors[c_box]
                     b_loc = level.get_location((row, col), translate=True)
                     _boxes = np.append(_boxes, Box(p_box, b_loc, b_color))
-
+                    
+        log.debug("Finished boxes.")
         return _boxes
         
     def __build_level(self):
         """Builds an adjacent list with locations and its neighbors
         """
+        log.debug("Building level...")
+        
         raw_walls = self.__raw_walls
         self.level_row_cnt = row_cnt = len(raw_walls)
         self.level_col_cnt = col_cnt = len(raw_walls[0])
@@ -162,19 +176,25 @@ class Configuration(object):
                         )
                     except IndexError:
                         pass
-
+        
+        log.debug("Finished levels.")
         return Level(layout, row_cnt, col_cnt)
     
     def build_structure(self):
+        log.debug("Building overall structure...")
+        
         __level = self.__build_level()
         __agents = self.__build_agents(__level)
         __boxes = self.__build_boxes(__level)
         __goals = self.__build_goals(__level)
         self.__type = self.__get_strategy_type(__agents, __boxes, __goals)
         
+        log.debug("Finished structure.")
         return __level, __agents, __boxes, __goals
     
     def __get_strategy_type(self, agents: [Agent, ...], boxes: [Box, ...], goals: [Goal, ...]):
+        log.debug("Returning strategy type.")
+        
         # Change configuration type
         if not boxes.any():
             return StrategyType.AGENTS
@@ -190,8 +210,9 @@ class Configuration(object):
                 return StrategyType.AGENTS
         
         # If reached here, we do not know the type of strategy to use
-        raise Exception(
-            'Could not identify level. '
-            'This is mostly because this algorithm was '
-            'not designed for this type level configuration.'
-        )
+        __err = 'Could not identify level. ' \
+        'This is mostly because this algorithm was ' \
+        'not designed for this type level configuration.'
+        
+        log.error(__err)
+        raise Exception(__err)
