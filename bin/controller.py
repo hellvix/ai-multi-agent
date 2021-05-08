@@ -324,7 +324,7 @@ class Controller(object):
                     list_actors, list_actions = self.__state_search(*self.__downsize_level(agent))
                     state_agents, state_boxes = list_actors
                     
-                    __debug_msg = 'Extracting plan...'
+                    __debug_msg = "Extracting plan..."
                     log.debug(__debug_msg)
                     print(__debug_msg, file=sys.stderr, flush=True)
                     
