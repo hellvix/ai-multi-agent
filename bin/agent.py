@@ -21,6 +21,9 @@ class Agent(Actor):
     def __actor_type__(self):
         return 'Agent'
     
+    def __lt__(self, other):
+        return int(self.identifier) < int(other.identifier)
+    
     def __eq__(self, value):
 
         if not isinstance(value, Agent):

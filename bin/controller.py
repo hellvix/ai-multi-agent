@@ -233,16 +233,21 @@ class Controller(object):
         """
         agents = self.__agents
         _pagts = PriorityQueue()
+        _ord_agts = []
         
+        _score = 0
         for agt in agents:
-            _score = 0
             for g in agt.goals:
                 # Agents are scheduled ascending 
                 # by distance from their location to their goal location
                 _score += agt.location.distance(g.location) + g.location.distance(g.destination)
             _pagts.put((_score, agt))
 
-        return _pagts
+        while not _pagts.empty():
+            _, agt = _pagts.get()
+            _ord_agts.append(agt)
+            
+        return _ord_agts
         
 
     def __planner(self):
@@ -251,7 +256,7 @@ class Controller(object):
         log.debug(__debug_msg)
 
         # Assign route for agents
-        agents = self.__agents
+        agents = self.__agent_scheduler()
         agents_desire = True
         
         while agents_desire:
@@ -273,6 +278,7 @@ class Controller(object):
 
                     # Update the desire in case boxes are involved
                     if agent.desire.is_box_desire():
+                        log.debug("Adapting route and desire locations...")
                         # The agent is tanding too close to where it wants to go
                         if len(route) == 1:
                             route = [agent.location, ]
@@ -283,6 +289,8 @@ class Controller(object):
                             agent.desire.location = route[-1:][0]
 
                     agent.update_route(route)
+                    log.debug("Route for %s is %s." % (agent, agent.current_route))
+                    log.debug("Desire location for %s is %s." % (agent, agent.desire.location))
         
             for agent in agents:
                 __debug_msg = 'Checking route conflicts for Agent %s...' % agent.identifier
@@ -290,19 +298,23 @@ class Controller(object):
                 print(__debug_msg, file=sys.stderr, flush=True)
                 
                 if not agent.desire.is_sleep_desire():
+                    log.debug("%s is awake!" % agent)
+                    
                     conflicts = self.__check_conflicts(agent)
 
                     # @TODO: Try to move the agent where the conflict starts
-                    __debug_msg = 'No conflicts in partial route for Agent %s...' % agent.identifier
-                    log.debug(__debug_msg)
-                    print(__debug_msg, file=sys.stderr, flush=True)
-                    
+                    log.debug("Systematically generating movements for route %s." % agent.current_route)
                     actions = Controller.generate_move_actions(agent.current_route)
                     agent.update_actions(actions)
                     
                     # Last location from actions
-                    last_loc = self.__location_from_actions(agent.location, actions)
+                    last_loc, routes = self.__location_from_actions(agent.location, actions, return_route=True)
+                    agent.update_route(routes)
+                    log.debug("%s new route is %s." % (agent, agent.current_route))
+                    
                     agent.move(last_loc)  # location nearby box
+                    log.debug("%s moved to %s." % (agent, last_loc))
+                    
                     agent.update_desire()
                     
                     __debug_msg = "Performing state search..."
@@ -329,12 +341,14 @@ class Controller(object):
                             if a.equals(agt):
                                 agt.move(a.location)
                                 agent.update_desire()
+                                log.debug("%s moved to %s." % (agt, agt.location))
 
                     # Moving boxes from result in state
                     for b in state_boxes:
                         for box in self.__boxes:
                             if b.equals(box):
                                 box.move(b.location)
+                                log.debug("%s moved to %s." % (box, box.location))
 
                     agent.update_actions(agt_actions)
                     
@@ -352,7 +366,7 @@ class Controller(object):
         self.__equalize_actions()
         client.Client.send_to_server(self.__assemble())
         
-    def __location_from_actions(self, initial_loc: 'Location', actions: '[Action, ...]', return_plan=False):
+    def __location_from_actions(self, initial_loc: 'Location', actions: '[Action, ...]', return_route=False):
         plan = []
         last_loc = initial_loc
         
@@ -360,8 +374,7 @@ class Controller(object):
             last_loc = self.__level.location_from_action(last_loc, act)
             plan.append(last_loc)
         
-        if return_plan:
-            last_loc, plan
+        if return_route: return last_loc, plan
 
         return last_loc
         
@@ -577,7 +590,7 @@ class Controller(object):
                 path_y.append('same y')
 
             else:
-                __err = "Typo error: Agent cannot move 2 steps in y (rows) !"
+                __err = "Typo error: Agent cannot move 2 steps in y (rows) ! %s " % yval
                 log.error(__err)
                 raise Exception(__err)
 
@@ -593,7 +606,7 @@ class Controller(object):
                 path_x.append('same x')
 
             else:
-                __err = 'Typo error: Agent cannot move 2 steps in x (columns) !'
+                __err = 'Typo error: Agent cannot move 2 steps in x (columns) ! %s ' % xval
                 log.error(__err)
                 raise Exception(__err)
 
@@ -612,7 +625,7 @@ class Controller(object):
                 pass
 
             else:
-                __err = 'Typo error: Agent cannot move diagonally / in both directions !'
+                __err = 'Typo error: Agent cannot move diagonally / in both directions ! y: %s, x: %s' % (i, j)
                 log.error(__err)
 
         return path_y
