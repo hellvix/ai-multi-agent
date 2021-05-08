@@ -1,0 +1,3 @@
+C:\Users\dimos\Documents\GitHub\artificial-intelligence-final\bin
+
+java -jar ../server.jar -l ../levels/MAPF00.lvl -c "python main.py" -g -s 150 -t 1800
