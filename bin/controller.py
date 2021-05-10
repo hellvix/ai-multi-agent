@@ -235,8 +235,8 @@ class Controller(object):
         _pagts = PriorityQueue()
         _ord_agts = []
         
-        _score = 0
         for agt in agents:
+            _score = 0
             for g in agt.goals:
                 # Agents are scheduled ascending 
                 # by distance from their location to their goal location
@@ -359,7 +359,7 @@ class Controller(object):
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
         # DONE
         
-        __debug_msg = 'Solving level...'
+        __debug_msg = 'Sending final plan to server...'
         log.debug(__debug_msg)
         print(__debug_msg, file=sys.stderr, flush=True)
         

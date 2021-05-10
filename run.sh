@@ -8,27 +8,37 @@ helpFunction()
    echo "\t-m level to be executed. Relative path from ROOT/levels/"
    echo "\t-t server timeout"
    echo "\t-s server action replay speed"
+   echo "\t-c start client in competition mode reading levels from the given path"
    echo "\t-h display this message"
    echo ""
    exit 1
 }
 
-while getopts "m:t:s:h:" opt
+while getopts "m:t:s:h:c:" opt
 do
    case "$opt" in
       m ) level="$OPTARG" ;;
       t ) timeout="$OPTARG" ;;
       s ) speed="$OPTARG" ;;
+      c ) competition="$OPTARG" ;;
       h ) helpFunction ;;
       ? ) helpFunction ;;
    esac
 done
 
+if [ -z "$competition" ]
+then
+   echo "Starting client in competition mode. Levels should be in levels/comp21..."
+   java -jar server.jar -c "python bin/main.py" -l $competition -t 180 -o "WESDONK.zip"
+   echo "java -jar server.jar -c \"python bin/main.py\" -l \"levels/comp21/\" -t 180 -o \"WESDONK.zip\""
+
+   exit 0
+fi
+
 if [ -z "$level" ]
 then
    level="MAPF00.lvl"
    echo "- No level specified. Using default:" $level;
-   
 fi
 
 if [ -z "$timeout" ]
@@ -57,3 +67,4 @@ echo "java -jar server.jar -l "levels/$level" -c \"python bin/main.py\" -g -s $s
 echo ""
 
 java -jar server.jar -l "levels/$level" -c "python bin/main.py" -g -s $speed -t $timeout
+exit 0
