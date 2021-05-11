@@ -77,7 +77,7 @@ class State(object):
         PCONST = 100
         penalty = 0
         
-        if self.__boxes:
+        if self.__boxes.size:
             # Boxes are in their location
             all_boxes_done = sum([box.has_reached() for box in self.__boxes])
             
@@ -92,7 +92,7 @@ class State(object):
     
     def __box_to_goal_heuristic(self):
         # Distance from box to its destination
-        return sum(box.distance(box.destination) for box in self.__boxes)
+        return sum(box.distance(box.destination) for box in self.__boxes if box.destination)
     
     def __agent_to_desire_heuristic(self):
         # Distance from agent to desire (either box or goal)
@@ -196,10 +196,9 @@ class State(object):
         
         if self.__boxes.size:
             for box in self.__boxes:
-                if box.location != box.destination:
+                if box.destination and box.location != box.destination:
                     return False
             return True
-        
         return not sum(agent.distance(agent.desire.location) for agent in self.__agents)
     
     def __is_applicable(self, agent: Agent, action: 'Action') -> 'bool':
@@ -226,7 +225,8 @@ class State(object):
                 return False
     
     def __is_location_with_box(self, location: Location, color: Color):
-        # Checks whether location has box of same color
+        """Check whether a location has a box of the same color as the agent.
+        """
         for box in self.__boxes:
             if box.color == color and box.location == location:
                 return True

@@ -25,12 +25,15 @@ class Box(Actor):
             self._hash = _hash
         return self._hash
     
-    def __eq__(self, value):
+    def __eq__(self, other):
 
-        if not isinstance(value, Box):
+        if not isinstance(other, Box):
             return False
 
-        return super().__eq__(value)
+        return super().__eq__(other)
+    
+    def __lt__(self, other):
+        return self.identifier < other.identifier
     
     def equals(self, other: 'Box'):
         return self.identifier == other.identifier and isinstance(other, Box)

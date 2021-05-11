@@ -49,6 +49,9 @@ class Level(object):
     @property
     def layout(self):
         return self.__layout
+    
+    def update_layout(self, layout):
+        self.__layout = layout
 
     @property
     def num_rows(self):

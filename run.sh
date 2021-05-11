@@ -43,14 +43,14 @@ fi
 
 if [ -z "$timeout" ]
 then
-   timeout=18000
-   echo "- No timeout gispecifiedven. Using default:" $timeout;
+   timeout=300
+   echo "- No timeout specified. Using default:" $timeout;
    
 fi
 
 if [ -z "$speed" ]
 then
-   speed=150
+   speed=180
    echo "- No speed specified. Using default:" $speed;
    
 fi

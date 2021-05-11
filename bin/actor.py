@@ -80,6 +80,13 @@ class Actor(object):
     
     def clear_route(self):
         self.__current_route = None
+        
+    def add_to_route(self, loc: 'Location'
+                     ):
+        if not isinstance(loc, location.Location):
+            raise Exception('Parameter must be of type location.')
+
+        self.__current_route.append(loc)
 
     def update_route(self, route: ['Location', ...]):
         if route and not isinstance(route[0], location.Location):

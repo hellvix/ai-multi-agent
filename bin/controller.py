@@ -1,5 +1,4 @@
 import sys
-import time
 import memory
 import client
 import logging
@@ -35,6 +34,7 @@ class Controller(object):
         
         self.__parse_config__(configuration)
         self.__cached_routes = {}
+        self.__rev_cnfs = {a: [] for a in self.__agents}
     
     def __parse_config__(self, configuration: Configuration):
         """Parses Configuration into data structure with objects
@@ -59,7 +59,9 @@ class Controller(object):
                 
         # 1) First we find destination for the boxes
         for box in self.__boxes:
+            _d = self.__destination_for_box(box)
             box.destination = self.__destination_for_box(box)
+            if _d: box.update_route(self.__find_route(box.location, _d))
             
         # 2) Based on 1, we find goals for the agents
         for agent in self.__agents:
@@ -76,29 +78,20 @@ class Controller(object):
         log.error(__err)
         raise Exception(__err)
     
-    def __downsize_level(self, agent: 'Agent'):
+    def __adapt_level(self, agent: 'Agent', conflicts=None):
         """Copy and modify the level according to the route.
         """
+        __a = {agent, }
+        __b = {agent.desire.element, } if agent.desire.is_box_desire() else set()
+        
+        if conflicts:
+            __a = __a.union(conflicts[0])
+            __b = __b.union(conflicts[1])
+            
         _level = self.__level.clone()
+        _agents = deepcopy(np.array(list(__a)))
+        _boxes = deepcopy(np.array(list(__b)))
         _goals = self.__goals
-        
-        agent_locations = {agent.location for agent in self.__agents}
-        box_locations = {box.location for box in self.__boxes if box != agent.desire.element}
-        goal_locations = {loc for loc, goal in self.__goals.items() if goal.color != agent.color}
-        
-        layout = deepcopy(_level.layout)
-        
-        for row in layout:
-            for rloc in row:
-                if rloc in agent_locations.union(
-                    box_locations,
-                    goal_locations
-                ):
-                    rloc.is_wall = True
-                    
-        _level.__layout = layout
-        _agents = deepcopy(np.array([agent]))
-        _boxes = deepcopy(np.array([agent.desire.element] if self.__strategy != StrategyType.AGENTS else []))
         
         return _level, _agents, _boxes, _goals
     
@@ -112,8 +105,13 @@ class Controller(object):
             [list]: An empty list of agents with conflicting interests with the current route
         """
         route = agent.current_route
+        other_routes = {}
         
-        other_routes = {loc: agt for agt in self.__agents for loc in agt.current_route if not agt.equals(agent)}
+        for agt in self.__agents:
+            if agt.current_route and not agt.equals(agent):
+                for _r in agt.current_route:
+                    other_routes[_r] = agt
+        
         box_locations = {box.location: box for box in self.__boxes}
         agent_locations = {agt.location: agt for agt in self.__agents if not agt.equals(agent)}
         _agents = set()
@@ -121,16 +119,17 @@ class Controller(object):
         
         for loc in route:
             if loc.is_wall:
-                __err = "The path is blocked by a wall (?). find_route broken?"
+                __err = "%s is blocked by a wall. find_route broken?" % loc
                 log.error(__err)
                 raise Exception(__err)
             
             if loc in box_locations:
                 box = box_locations[loc]
                 oagt = self.get_box_owner(box)
+                
                 _boxes.add(box)
                 if not oagt.equals(agent):
-                    _agents.add(box_locations[loc])
+                    _agents.add(oagt)
                 
             if loc in agent_locations:
                 _agents.add(agent_locations[loc])
@@ -138,10 +137,10 @@ class Controller(object):
             if loc in other_routes:
                 _agents.add(other_routes[loc])
                     
-        __debug_msg = 'Conflicts found: %s' % (_agents.union(_boxes) or 'None')
+        __debug_msg = 'Conflicts found for %s: %s' % (agent, _agents.union(_boxes) or 'None')
         log.debug(__debug_msg)
         print(__debug_msg, file=sys.stderr, flush=True)
-        
+
         if _agents or _boxes:
             return list(_agents), list(_boxes)
         
@@ -194,7 +193,7 @@ class Controller(object):
         while True:
 
             iterations += 1
-            if iterations % 100 == 0:
+            if iterations % 50 == 0:
                 memory.print_search_status(explored, frontier)
 
             if memory.get_usage() > memory._max_usage:
@@ -224,7 +223,7 @@ class Controller(object):
 
             for n in expanded:
                 rnode = n.h, n
-                if not rnode in frontier.queue and not n in explored:
+                if not (rnode in frontier.queue or n in explored):
                     frontier.put(rnode)
                     
     def __agent_scheduler(self):
@@ -240,7 +239,11 @@ class Controller(object):
             for g in agt.goals:
                 # Agents are scheduled ascending 
                 # by distance from their location to their goal location
-                _score += agt.location.distance(g.location) + g.location.distance(g.destination)
+                _score += agt.location.distance(g.location)
+                
+                if hasattr(g, 'destination'):
+                    _score +=  g.location.distance(g.destination)
+
             _pagts.put((_score, agt))
 
         while not _pagts.empty():
@@ -261,6 +264,7 @@ class Controller(object):
         
         while agents_desire:
             # Derive move actions
+            
             for agent in agents:
                 __debug_msg = 'Checking desire for Agent %s ...' % agent.identifier
                 log.debug(__debug_msg)
@@ -287,7 +291,7 @@ class Controller(object):
                         else:
                             route = route[:-1]
                             agent.desire.location = route[-1:][0]
-
+                            
                     agent.update_route(route)
                     log.debug("Route for %s is %s." % (agent, agent.current_route))
                     log.debug("Desire location for %s is %s." % (agent, agent.desire.location))
@@ -298,33 +302,43 @@ class Controller(object):
                 print(__debug_msg, file=sys.stderr, flush=True)
                 
                 if not agent.desire.is_sleep_desire():
-                    log.debug("%s is awake!" % agent)
+                    log.debug("%s is awake! Desire is %s." % (agent, agent.desire))
+                    log.debug("Generating movements for route %s." % agent.current_route)
                     
-                    conflicts = self.__check_conflicts(agent)
-
-                    # @TODO: Try to move the agent where the conflict starts
-                    log.debug("Systematically generating movements for route %s." % agent.current_route)
                     actions = Controller.generate_move_actions(agent.current_route)
                     agent.update_actions(actions)
                     
-                    # Last location from actions
-                    last_loc, routes = self.__location_from_actions(agent.location, actions, return_route=True)
-                    agent.update_route(routes)
-                    log.debug("%s new route is %s." % (agent, agent.current_route))
-                    
-                    agent.move(last_loc)  # location nearby box
-                    log.debug("%s moved to %s." % (agent, last_loc))
-                    
-                    agent.update_desire()
+                    conflicts = self.__check_conflicts(agent)
+
+                    if not conflicts:
+                        # Last location from actions
+                        last_loc = self.__location_from_actions(
+                            agent.location, 
+                            actions
+                        )
+                        log.debug("Moving %s to %s." % (agent, last_loc))
+                        agent.move(last_loc)  # location nearby box
+                        agent.update_desire()
                     
                     __debug_msg = "Performing state search..."
                     log.debug(__debug_msg)
                     print(__debug_msg, file=sys.stderr, flush=True)
                     
-                    list_actors, list_actions = self.__state_search(*self.__downsize_level(agent))
+                    list_actors, list_actions = self.__state_search(*self.__adapt_level(agent))
                     state_agents, state_boxes = list_actors
                     
-                    __debug_msg = "Extracting plan..."
+                    conflicts = self.__check_conflicts(agent)
+                    
+                    if conflicts:
+                        cnfs_agts = conflicts[0]
+                        self.__rev_cnfs[agent] = cnfs_agts
+
+                        for agt in agents:
+                            if not agent.equals(agt):
+                                if agent not in self.__rev_cnfs[agt]:
+                                    self.__make_agent_wait(agent, agt)
+                    
+                    __debug_msg = "Extracting actions..."
                     log.debug(__debug_msg)
                     print(__debug_msg, file=sys.stderr, flush=True)
                     
@@ -335,29 +349,28 @@ class Controller(object):
                             if agt.equals(agent):
                                 agt_actions.append(action)
                                 
-                    # Updating results from state
+                    # Updating locations from actions received from state
                     for a in state_agents:
                         for agt in self.__agents:
                             if a.equals(agt):
+                                agt.add_to_route(a.location)
                                 agt.move(a.location)
                                 agent.update_desire()
                                 log.debug("%s moved to %s." % (agt, agt.location))
-
-                    # Moving boxes from result in state
+                                
+                    log.debug('%s new route is %s.' % (agent, agent.current_route))
+                    
+                    # Updating locations from actions received from state
                     for b in state_boxes:
                         for box in self.__boxes:
                             if b.equals(box):
                                 box.move(b.location)
                                 log.debug("%s moved to %s." % (box, box.location))
-
-                    agent.update_actions(agt_actions)
                     
-                    if conflicts:
-                        self.__make_agents_wait(agent, conflicts[0])
+                    agent.update_actions(agt_actions)
                     
             # Are agents satisfied?
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
-        # DONE
         
         __debug_msg = 'Sending final plan to server...'
         log.debug(__debug_msg)
@@ -399,7 +412,7 @@ class Controller(object):
                         )
         return
     
-    def __make_agents_wait(self, agent: Agent, agents: {Agent, ...}):
+    def __make_agent_wait(self, agent: Agent, other_agt: Agent):
         """Insert NoOps for agents. 
         Handful when one agent is executing its actions and the others have to wait.
 
@@ -407,10 +420,16 @@ class Controller(object):
             agent (Agent): The agent we derive the waiting from.
         """
         
-        for other_agt in agents:
-            sz_dif = len(agent.actions) - len(other_agt.actions)
-            if sz_dif > 0:
-                other_agt.update_actions([Action.NoOp for _ in range(sz_dif)])
+        sz_dif = len(agent.actions) - len(other_agt.actions)
+        if sz_dif > 0:
+            other_agt.update_actions([Action.NoOp for _ in range(sz_dif)])
+        else:
+            # Tries to find where the route intersects
+            count = 0
+            for n, loc in enumerate(agent.current_route):
+                for l in other_agt.current_route:
+                    if l == loc: count = n
+            other_agt.update_actions([Action.NoOp for _ in range(0, count)])
 
     def __assemble(self) -> [Action, ...]:
         """Gather agents actions so they can be streamlined to the server
@@ -453,14 +472,16 @@ class Controller(object):
         
         if self.__strategy == StrategyType.AGENTS:
             for loc, goal in self.__goals.items():
-                if goal.color == agent.color:
+                if goal.identifier == agent.identifier:
                     _goals.put((agent.distance(loc), goal))
         else:
             for box in self.__boxes:
                 if box.destination and box.color == agent.color:
                     _goals.put((agent.distance(box.location), box))
         
-        f_goal = []        
+        f_goal = []
+        
+        # Sort boxes by score (distance)
         while not _goals.empty():
             f_goal.append(_goals.get()[1])
         return f_goal
@@ -472,7 +493,7 @@ class Controller(object):
         other_destinations = set(box.destination for box in self.__boxes if box.destination)
 
         for loc, goal in self.__goals.items():
-            if not loc in other_destinations and goal.identifier == box.identifier:
+            if loc not in other_destinations and goal.identifier == box.identifier:
                 dist = box.location.distance(goal.location)
                 _dests.put((dist, loc))
                 
@@ -514,7 +535,6 @@ class Controller(object):
         frontier.put((start.distance(end), Node(start, None)))
         explored = set()
         _rhash = hash((start, end))
-        _ignored = {start, end}
         
         try:
             return self.__cached_routes[_rhash]
@@ -544,17 +564,15 @@ class Controller(object):
                 # Ignore the first position (start)
                 #_r = _r[1:]
                 self.__cached_routes.update({_rhash: _r})
-                self.__find_route(start, end)
                 return _r
 
             explored.add(visited)
             expanded = visited.neighbors
             
             for loc in expanded:
-                if self.__is_location_free(loc, _ignored):
-                    nnode = loc.distance(end), Node(loc, node)
-                    if not nnode in frontier.queue and not loc in explored:
-                        frontier.put(nnode)
+                nnode = loc.distance(end), Node(loc, node)
+                if not (nnode in frontier.queue or loc in explored) and not loc.is_wall:
+                    frontier.put(nnode)
 
     @staticmethod
     def generate_move_actions(path: '[Location, ...]') -> '[Actions, ...]':
