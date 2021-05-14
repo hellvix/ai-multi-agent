@@ -374,7 +374,6 @@ class Controller(object):
                                 box.move(b.location)
                                 log.debug("%s moved to %s." % (box, box.location))
 
-                    dbg += 1
             # Are agents satisfied?
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
         
