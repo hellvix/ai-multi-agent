@@ -179,15 +179,19 @@ class Controller(object):
                 owner = self.get_box_owner(_o)
                 if not _o.destination:
                     _o.destination = self.__level.get_location(
-                        (_o.location.row + 1, _o.location.col),
+                        (_o.location.row + 2, _o.location.col),
                         translate=True
                     ) # WHERE_PUT_BOX_GOES HERE
                 owner.reschedule_desire(_o)  # update_desire gets called inside
                 owner.update_route(self.__find_route(owner.location, owner.desire.location))
                 
-                __debug_msg = 'Desire for Agent %s rescheduled to %s.' % (owner.identifier, owner.desire)
+                __debug_msg = 'Rescheduling desire for Agent %s. New desire is %s.' % (owner.identifier, owner.desire)
                 print(__debug_msg, file=sys.stderr, flush=True)
                 log.debug(__debug_msg)
+            else:
+                # Should find out where to put the agent
+                # @TODO: recompute their route too
+                pass
                 
             obstructions.remove(_o)
     
@@ -321,14 +325,18 @@ class Controller(object):
                         agent.location, 
                         actions
                     )
-                    log.debug("Moving %s to %s." % (agent, last_loc))
+                    
+                    __debug_msg = "Moving %s to %s." % (agent, last_loc)
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
                     agent.move(last_loc)  # location nearby box
                     agent.update_desire()
-                    agent.update_route(self.__find_route(agent.location, destination))
                     
                     __debug_msg = "Performing state search..."
                     log.debug(__debug_msg)
                     print(__debug_msg, file=sys.stderr, flush=True)
+                    
                     list_actors, list_actions = self.__state_search(*self.__adapt_level(agent))
                     state_agents, state_boxes = list_actors
                                     
@@ -345,13 +353,13 @@ class Controller(object):
                                 
                     # Updating locations from actions received from state
                     for a in state_agents:
-                        for agt in self.__agents:
+                        for agt in agents:
                             if a.equals(agt):
                                 agt.add_to_route(a.location)
                                 agt.move(a.location)
                                 agent.update_desire()
                                 log.debug("%s moved to %s." % (agt, agt.location))
-                                
+
                     agent.update_actions(agt_actions)
                     log.debug('%s new route is %s with actions %s.' % (
                         agent,
@@ -365,7 +373,8 @@ class Controller(object):
                             if b.equals(box):
                                 box.move(b.location)
                                 log.debug("%s moved to %s." % (box, box.location))
-                    
+
+                    dbg += 1
             # Are agents satisfied?
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
         

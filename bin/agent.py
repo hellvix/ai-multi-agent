@@ -1,10 +1,8 @@
+import sys
 import logging
 
 from eprint import deb
 
-from queue import PriorityQueue
-
-from goal import Goal
 from actor import Actor
 from action import Action
 from location import Location
@@ -140,7 +138,7 @@ class Agent(Actor):
 
         """
         if overrule: self._clear_desire()
-            
+
         if self.desire:
             if self.is_desire_satisfied():
                 if self.desire.is_location_desire():
@@ -181,7 +179,10 @@ class Agent(Actor):
         """
         # Update desire in case boxes are involved
         if self.desire.is_box_desire():
-            log.debug("Adapting route and desire locations...")
+            __debug_msg = "Adapting route and desire locations..."
+            print(__debug_msg, file=sys.stderr, flush=True)
+            log.debug(__debug_msg)
+            
             # The agent is too close to where it wants to go
             if len(route) == 1:
                 _end = self.location
@@ -191,6 +192,10 @@ class Agent(Actor):
             else:
                 route = route[:-1]
                 self.desire.location = route[-1:][0]
+                
+            __debug_msg = "Route adapted. New route is %s." % route
+            print(__debug_msg, file=sys.stderr, flush=True)
+            log.debug(__debug_msg)
 
         return route
     
