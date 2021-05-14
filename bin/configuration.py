@@ -171,9 +171,9 @@ class Configuration(object):
                     # Positions in the location array start from 0
                     # Ignoring walls
                     try:
-                        loc.neighbors = set(
+                        loc.neighbors = [
                             layout[nrow-1][ncol-1] for nrow, ncol in positions if not raw_walls[nrow][ncol]
-                        )
+                        ]
                     except IndexError:
                         pass
         

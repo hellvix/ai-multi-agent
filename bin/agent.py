@@ -1,3 +1,5 @@
+import logging
+
 from eprint import deb
 
 from queue import PriorityQueue
@@ -7,6 +9,10 @@ from actor import Actor
 from action import Action
 from location import Location
 from desire import Desire, DesireType
+
+
+log = logging.getLogger(__name__)
+
 
 class Agent(Actor):
     
@@ -48,6 +54,21 @@ class Agent(Actor):
     def has_route(self):
         return not self.current_route == None
     
+    def reschedule_desire(self, goal):
+        _ng = [goal, ]
+        
+        if not self.desire.is_sleep_desire():
+            # Current desire must not be discarded
+            _ng.append(self.desire.element)
+        
+        _ng.extend(self.__goals)
+        self.__goals = _ng
+        self.update_desire(overrule=True)
+        
+    def update_route(self, route):
+        _r = self.__correct_route(route)
+        super().update_route(_r)
+    
     def update_actions(self, actions: [Action, ...]):
         self.__actions.extend(actions)
 
@@ -82,6 +103,13 @@ class Agent(Actor):
     def desire(self):
         return self.__desire
     
+    def _clear_desire(self):
+        """ The current desire will be lost.
+        It must be manually added to the list of goals.
+        This method should ideally be called from 'reschedule_desire'
+        """
+        self.__desire = None
+    
     @property
     def desire_type(self):
         return self.__desire.type
@@ -104,7 +132,15 @@ class Agent(Actor):
             return True
         return False
     
-    def update_desire(self):
+    def update_desire(self, overrule=False):
+        """Update the agent desire until it defaults to sleep.
+
+        Args:
+            overrule (bool, optional): If given, the current desire will be discarded. Defaults to True.
+
+        """
+        if overrule: self._clear_desire()
+            
         if self.desire:
             if self.is_desire_satisfied():
                 if self.desire.is_location_desire():
@@ -133,6 +169,30 @@ class Agent(Actor):
             DesireType.SLEEP,
             location=self.location
         )
+
+    def __correct_route(self, route):
+        """Redefine routes for each goal type.
+        If boxes are involved, we cannot walk all the way to their location, but
+        a location nearby.
+
+        Args:
+            agent ([Agent]): The agent
+            route ([Location, ...]): Its route
+        """
+        # Update desire in case boxes are involved
+        if self.desire.is_box_desire():
+            log.debug("Adapting route and desire locations...")
+            # The agent is too close to where it wants to go
+            if len(route) == 1:
+                _end = self.location
+                route = [_end, ]
+                self.desire.location = _end
+            # Avoid sending the last location (box is standing there)
+            else:
+                route = route[:-1]
+                self.desire.location = route[-1:][0]
+
+        return route
     
     def equals(self, other: 'Agent'):
         return self.identifier == other.identifier and isinstance(other, Agent)

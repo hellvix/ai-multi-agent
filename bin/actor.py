@@ -92,5 +92,4 @@ class Actor(object):
         if route and not isinstance(route[0], location.Location):
             raise Exception(
                 'The agent route must be a list of Locations, not %s.' % type(route[0]))
-
         self.__current_route = route

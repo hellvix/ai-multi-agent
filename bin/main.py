@@ -1,5 +1,4 @@
 import logging
-import argparse
 
 from client import Client
 
