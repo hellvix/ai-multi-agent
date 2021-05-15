@@ -55,7 +55,7 @@ class Agent(Actor):
     def reschedule_desire(self, goal):
         _ng = [goal, ]
         
-        if not self.desire.is_sleep_desire():
+        if self.desire and not self.desire.is_sleep_desire():
             # Current desire must not be discarded
             _ng.append(self.desire.element)
         

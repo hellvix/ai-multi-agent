@@ -149,7 +149,7 @@ class Controller(object):
                     owner = self.get_box_owner(_o)
                     if not _o.destination:
                         _o.destination = self.__level.get_location(
-                            (_o.location.row, _o.location.col + 9),
+                            (_o.location.row, _o.location.col + 6),
                             translate=True
                         ) # WHERE_PUT_BOX_GOES HERE
                     owner.reschedule_desire(_o)  # update_desire gets called inside

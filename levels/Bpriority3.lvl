@@ -1,0 +1,26 @@
+#domain
+hospital
+#levelname
+BPRIORITIES2
+#colors
+blue: 0, C, A
+cyan: 1, B
+#initial
+++++++++++++
++     +   ++
++     +   ++
++++++ + ++++
++C       0 +
++ ++       +
++1 +  B A  +
+++++++++++++
+#goal
+++++++++++++
++    B+  A++
++     +   ++
++++++ + ++++
++          +
++ ++       +
++  +      A+
+++++++++++++
+#end
