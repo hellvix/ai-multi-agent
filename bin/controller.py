@@ -142,7 +142,6 @@ class Controller(object):
         """Given a list of obstructions, find out what to do with it.
         """
         
-        deb('HELLOW THERE', obstructions)
         # Affected agent, list of obstructing agents
         for _af, in_the_way in obstructions.items():
             for _o in in_the_way:
@@ -167,7 +166,6 @@ class Controller(object):
                     print(__debug_msg, file=sys.stderr, flush=True)
                     log.debug(__debug_msg)
                 else:
-                    # deb('HEREEeeeeeeeee!!!')
                     # self.__conflict_solver(_af, _o)
                     pass
                 
