@@ -193,7 +193,6 @@ class State(object):
         return expanded_states
         
     def is_goal_state(self) -> 'bool':
-        
         if self.__boxes.size:
             for box in self.__boxes:
                 if box.destination and box.location != box.destination:
