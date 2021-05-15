@@ -14,6 +14,7 @@ class Actor(object):
         self.__location = location
         self.__color = color
         self.__current_route = None
+        self.__history = {} # A list of all 
         
         self._hash
         
@@ -80,6 +81,7 @@ class Actor(object):
     
     def clear_route(self):
         self.__current_route = None
+        del self.__history[hash((r for r in self.__current_route))]
         
     def add_to_route(self, loc: 'Location'
                      ):
@@ -87,9 +89,19 @@ class Actor(object):
             raise Exception('Parameter must be of type location.')
 
         self.__current_route.append(loc)
+        
+    @property
+    def history(self):
+        """A list of locations where this actor has been through
+
+        Returns:
+            [list]: [Location, ...]
+        """
+        return self.__history
 
     def update_route(self, route: ['Location', ...]):
         if route and not isinstance(route[0], location.Location):
             raise Exception(
                 'The agent route must be a list of Locations, not %s.' % type(route[0]))
         self.__current_route = route
+        self.__history[hash((r for r in route))] = route

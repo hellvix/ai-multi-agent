@@ -112,6 +112,30 @@ class Agent(Actor):
     def desire_type(self):
         return self.__desire.type
     
+    def has_box_desire(self):
+        return self.desire.is_box_desire()
+    
+    def combined_history(self):
+        """A summary of all locations this agent has been through (as well as its box, if any).
+
+        Returns:
+            [list]: [Location, ...]
+        """
+        _r = []
+        
+        for _, v in self.history.items():
+            _r.extend(v)
+
+        if self.has_box_desire():
+            for _, v in self.desire.element.history.items():
+                _r.extend(v)
+        
+        return _r
+    
+    def has_sleep_desire(self):
+        if not self.desire: return True
+        return self.desire.is_sleep_desire()
+    
     def is_desire_satisfied(self):
         if self.desire.is_box_desire():
             if self.desire.is_move_box_desire():
