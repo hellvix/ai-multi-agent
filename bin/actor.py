@@ -81,7 +81,9 @@ class Actor(object):
     
     def clear_route(self):
         self.__current_route = None
-        del self.__history[hash((r for r in self.__current_route))]
+        
+        if self.__current_route:
+            del self.__history[hash((r for r in self.__current_route))]
         
     def add_to_route(self, loc: 'Location'
                      ):
