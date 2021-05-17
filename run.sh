@@ -29,7 +29,7 @@ done
 if [ ! -z "$competition" ]
 then
    echo "Starting client in competition mode. Levels from folder $competition"
-   echo "java -jar server.jar -c \"python bin/main.py\" -l \"levels/comp21/\" -t 180 -o \"WESDONK.zip\""
+   echo "java -jar server.jar -c \"python bin/main.py\" -l \"levels/comp21/\" -t 180 -o \"replay_WESDONK.log\""
 
    java -jar server.jar -c "python bin/main.py" -l $competition -t 180 -o "WESDONK.zip"
    exit 0
