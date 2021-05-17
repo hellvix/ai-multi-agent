@@ -150,7 +150,6 @@ class Controller(object):
                 __debug_msg = 'Actor %s found on route %s.' % (_a, route)
                 print(__debug_msg, file=sys.stderr, flush=True)
                 log.debug(__debug_msg)
-
         return {agent: _m}
     
     def __check_obstructions(self, obstructions: dict()):
@@ -164,7 +163,7 @@ class Controller(object):
                     owner = self.get_box_owner(_o)
                     if not _o.destination:
                         _o.destination = self.__level.get_location(
-                            (_o.location.row + 2, _o.location.col + 3),
+                            (_o.location.row, _o.location.col + 9),
                             translate=True
                         ) # WHERE_PUT_BOX_GOES HERE
                     owner.reschedule_desire(_o)  # update_desire gets called inside
