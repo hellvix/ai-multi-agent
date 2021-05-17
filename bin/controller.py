@@ -92,10 +92,12 @@ class Controller(object):
         _goals = self.__goals
         return _level, _agents, _boxes, _goals
     
-    def __conflict_solver(self, agent: Agent, other_agent: Agent, current_route=None):
+    def __conflict_solver(self, agent: Agent, other_agent: Agent, current_route=None, delay_plan=True):
         """
         Check whether two agents have overlaping routes.
         If no route is given, the agent's actual route is checked.
+        
+        If delay_plan is passed, introduces NoOps in the begining of the plan.
         """
         
         if not current_route: 
@@ -103,11 +105,24 @@ class Controller(object):
         else:
             route = current_route
             
+        conflicts = False  # Do conflicts exist?
+            
         for _r1, _r2 in zip(route, other_agent.current_route):
             if _r1 == _r2:
-                other_agent.update_actions([Action.NoOp, ])
+                if delay_plan:
+                    _oplan = other_agent.actions
+                    other_agent.clear_actions(keep_route=True)
+                    plan = [Action.NoOp, ]
+                    plan.extend(_oplan)
+                else:
+                    plan = [Action.NoOp, ]
+                    
+                other_agent.update_actions(plan)
+                conflicts = True
         
-    def __route_sweeper(self, agent: Agent, route: ['Location', ...], ignore=set()):
+        return conflicts
+        
+    def __route_sweeper(self, agent: Agent, route: ['Location', ...], ignore=set(), include_routes=False):
         """Given a route, check whether something is standing in it.
         The idea is to clear the route so this agent can move.
 
@@ -138,7 +153,7 @@ class Controller(object):
 
         return {agent: _m}
     
-    def __schedule_obstructions(self, obstructions: dict()):
+    def __check_obstructions(self, obstructions: dict()):
         """Given a list of obstructions, find out what to do with it.
         """
         
@@ -149,7 +164,7 @@ class Controller(object):
                     owner = self.get_box_owner(_o)
                     if not _o.destination:
                         _o.destination = self.__level.get_location(
-                            (_o.location.row, _o.location.col + 6),
+                            (_o.location.row + 2, _o.location.col + 3),
                             translate=True
                         ) # WHERE_PUT_BOX_GOES HERE
                     owner.reschedule_desire(_o)  # update_desire gets called inside
@@ -284,8 +299,8 @@ class Controller(object):
                     
                     log.debug("Route for %s is %s and desire is %s " % (agent, agent.current_route, agent.desire))
 
-                    # Change desires, moving agent priorities - if necessary
-                    self.__schedule_obstructions(to_move)
+                    # If obstructions exist, change desires, moving agent priorities
+                    self.__check_obstructions(to_move)
                     
                     actions = Controller.generate_move_actions(agent.current_route)
                     # Checkinf conflicts before generating actions
@@ -344,7 +359,9 @@ class Controller(object):
                             if b.equals(box):
                                 box.move(b.location)
                                 log.debug("%s moved to %s." % (box, box.location))
-
+                                
+            self.__check_route_conflicts()
+            
             # Are agents satisfied?
             agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
         
@@ -354,6 +371,20 @@ class Controller(object):
         
         self.__equalize_actions()
         client.Client.send_to_server(self.__assemble())
+        
+    def __check_route_conflicts(self):
+        """Check route conflicts and make agents wait
+        """
+        waiting_list = {agent:[] for agent in self.__agents}
+            
+        for agent in self.__agents:
+            for other_agt in self.__agents:
+                if not agent.equals(other_agt):
+                    if agent not in waiting_list[other_agt]:
+                        conflicts = self.__conflict_solver(agent, other_agt, delay_plan=True)
+                        if conflicts:
+                            waiting_list[agent].append(other_agt)
+                
         
     def __location_from_actions(self, initial_loc: 'Location', actions: '[Action, ...]', return_route=False):
         plan = []

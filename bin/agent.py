@@ -70,9 +70,11 @@ class Agent(Actor):
     def update_actions(self, actions: [Action, ...]):
         self.__actions.extend(actions)
 
-    def clear_actions(self):
+    def clear_actions(self, keep_route=False):
         self.__actions = []
-        self.clear_route()
+        
+        if not keep_route:
+            self.clear_route()
     
     def _get_goal(self):
         """Get the first Goal from the list.
