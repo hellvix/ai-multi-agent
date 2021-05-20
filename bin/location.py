@@ -76,6 +76,31 @@ class Location(object):
     def neighbors(self, value):
         self.__neighbors = value
         
+    def is_corner(self):
+        """Check whether the position is a corner
+        """
+        if self.is_wall or len(self.neighbors) != 2: return False
+        
+        # Building comparable neighbors
+        n_dif = {
+            'r': {Location(self.row, self.col - 1), Location(self.row, self.col + 1)},
+            'c': {Location(self.row - 1, self.col), Location(self.row + 1, self.col)}
+        }
+        
+        cnt = 0
+        
+        # Compare the neighbors and clear
+        for n in self.neighbors:
+            if n in n_dif['r']: 
+                cnt += 1
+                n_dif['r'] = set()
+            
+            if n in n_dif['c']:
+                cnt += 1
+                n_dif['c'] = set()
+        
+        return cnt == 2
+        
     def build_distance_array(self, rows: int, cols: int):
         """Precompute Manhattan distance for all points
 

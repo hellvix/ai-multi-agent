@@ -179,6 +179,26 @@ class Controller(object):
         
         return location not in _g_locs.union(_a_locs, _b_locs)
     
+    def __find_actor_placement(self, location: Location, how_far=0):
+        """Given a location, find where to put an object in relation to that location.
+
+        Args:
+            location (Location): A reference location
+        """
+        queue = PriorityQueue()
+        
+        for c in self.__level.corners:
+            queue.put((location.distance(c), c))
+        
+        hf = 0
+        corner = None
+        
+        while hf <= how_far:
+            _, corner = queue.get()
+            hf += 1
+        
+        return corner
+    
     def __check_obstructions(self, obstructions: dict()):
         """Given a list of obstructions, find out what to do with it.
         """
@@ -186,14 +206,24 @@ class Controller(object):
         # Affected agent, list of obstructing agents
         for _af, in_the_way in obstructions.items():
             for _o in in_the_way:
+                # Get a location in case we have to move something around
+                new_loc = self.__find_actor_placement(_o.location)
+                cnt = 0
+
+                # If that location is not free
+                if not self.__is_location_free(new_loc):
+                    while not self.__is_location_free(new_loc):
+                        new_loc = self.__find_actor_placement(_o.location, how_far=cnt)
+                        cnt += 1
+                    
+                deb('DEFINED LOCATION ', new_loc)
+                
                 if isinstance(_o, Box):
                     owner = self.get_box_owner(_o)
+                    
                     if not _o.destination:
-                        _o.destination = self.__level.get_location(
-                            (_o.location.row + 1, _o.location.col + 3),
-                            translate=True
-                        ) # WHERE_PUT_BOX_GOES HERE
-                        
+                        _o.destination = new_loc
+
                     owner.reschedule_desire(_o)  # update_desire gets called inside
                     owner.update_route(self.__find_route(owner.location, owner.desire.location))
                     
@@ -208,14 +238,9 @@ class Controller(object):
                     print(__debug_msg, file=sys.stderr, flush=True)
                     log.debug(__debug_msg)
                 else:
-                    _goto = self.__level.get_location(
-                        (_o.location.row, _o.location.col + 9),
-                        translate=True
-                    )  # WHERE_PUT_BOX_GOES HERE
-                    
                     _g = Goal(
                         _o.identifier,
-                        _goto,
+                        new_loc,
                         _o.color
                     )
                     _o.reschedule_desire(_g)

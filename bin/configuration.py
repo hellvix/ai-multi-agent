@@ -137,6 +137,7 @@ class Configuration(object):
         raw_walls = self.__raw_walls
         self.level_row_cnt = row_cnt = len(raw_walls)
         self.level_col_cnt = col_cnt = len(raw_walls[0])
+        corners = []
         
         # Ignoring out of bound walls
         #
@@ -144,7 +145,8 @@ class Configuration(object):
         # this, however, infers storing a lot of walls in certain maps, such as MAbispebjerg.lvl
         #
         layout = np.array([
-            [Location(row, col) for col in range(1, col_cnt - 1)] for row in range(1, row_cnt - 1)
+            [Location(row, col) for col
+             in range(1, col_cnt - 1)] for row in range(1, row_cnt - 1)
         ], dtype=object)
         
         # for each row
@@ -176,9 +178,13 @@ class Configuration(object):
                         ]
                     except IndexError:
                         pass
+                    
+                    # Compute the corners for the level
+                    if loc.is_corner():
+                        corners.append(loc)
         
         log.debug("Finished levels.")
-        return Level(layout, row_cnt, col_cnt)
+        return Level(layout, row_cnt, col_cnt, corners)
     
     def build_structure(self):
         log.debug("Building overall structure...")

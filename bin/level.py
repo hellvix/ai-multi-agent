@@ -16,7 +16,7 @@ class Level(object):
     Defines locations as a a set of locations, together with its neighbors.
     """
 
-    def __init__(self, layout: '[[Location, ...], ...]', num_rows: int, num_cols: int):
+    def __init__(self, layout: '[[Location, ...], ...]', num_rows: int, num_cols: int, corners: [Location, ...]):
         # Representation of the level in Location objects, ignoring outside walls.
         # This means row 1 in the level is actually located in row 0 in this array.
         # [
@@ -28,6 +28,7 @@ class Level(object):
         self.__num_rows = num_rows  # Total number of rows (counting outside walls)
         self.__num_cols = num_cols  # Total number of cols (counting outside walls)        
         self._hash = None
+        self.__corners = corners
         
     def __hash__(self):
         if self._hash is None:
@@ -45,6 +46,10 @@ class Level(object):
     
     def __repr__(self):
         return str(self.__layout)
+
+    @property
+    def corners(self):
+        return self.__corners
         
     @property
     def layout(self):
