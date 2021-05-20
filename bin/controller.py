@@ -152,6 +152,33 @@ class Controller(object):
                 log.debug(__debug_msg)
         return {agent: _m}
     
+    def __is_location_in_route(self, location: Location):
+        """Check whether a location is in the current route of one of the agents.
+
+        Args:
+            location (Location): the location to be checked
+
+        Returns:
+            [bool]: Whether a location is in the route
+        """
+        _agts = {agent for agent in self.__agents if agent.current_route}
+        return location in {loc for agent in _agts for loc in agent.current_route}
+    
+    def __is_location_free(self, location: Location):
+        """Check whether a location is free.
+
+        Args:
+            location (Location): the location object to be checked.
+
+        Returns:
+            [bool]: Whether a location is in the set of occupied locations
+        """
+        _g_locs = {loc for loc, _ in self.__goals.items()}
+        _a_locs = {agent.location for agent in self.__agents}
+        _b_locs = {box.location for box in self.__boxes}
+        
+        return location not in _g_locs.union(_a_locs, _b_locs)
+    
     def __check_obstructions(self, obstructions: dict()):
         """Given a list of obstructions, find out what to do with it.
         """
