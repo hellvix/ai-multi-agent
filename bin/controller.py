@@ -183,10 +183,15 @@ class Controller(object):
         """Given a location, find where to put an object in relation to that location.
 
         Args:
-            location (Location): A reference location
+            location (Location): Reference location to a c orner
+            how_far (int, optional): How far in the distance list should the corner be? Defaults to 0.
+
+        Returns:
+            [Location]: The location, which is a corner.
         """
         queue = PriorityQueue()
         
+        # Corners are sorted by distance to reference location
         for c in self.__level.corners:
             queue.put((location.distance(c), c))
         
@@ -216,8 +221,6 @@ class Controller(object):
                         new_loc = self.__find_actor_placement(_o.location, how_far=cnt)
                         cnt += 1
                     
-                deb('DEFINED LOCATION ', new_loc)
-                
                 if isinstance(_o, Box):
                     owner = self.get_box_owner(_o)
                     
@@ -238,6 +241,8 @@ class Controller(object):
                     print(__debug_msg, file=sys.stderr, flush=True)
                     log.debug(__debug_msg)
                 else:
+                    # The conflict is another agent
+                    # Create a goal and send it away
                     _g = Goal(
                         _o.identifier,
                         new_loc,
@@ -246,7 +251,7 @@ class Controller(object):
                     _o.reschedule_desire(_g)
                     _o.update_route(self.__find_route(_o.location, _o.desire.location))
                 
-                # Remove the obstructed agent from the 
+                # Remove the obstructed agent from the obstruction list
                 try:
                     if _af in obstructions[_o]:
                         obstructions[_o].remove(_af)
