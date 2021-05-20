@@ -193,6 +193,7 @@ class Controller(object):
                             (_o.location.row + 1, _o.location.col + 3),
                             translate=True
                         ) # WHERE_PUT_BOX_GOES HERE
+                        
                     owner.reschedule_desire(_o)  # update_desire gets called inside
                     owner.update_route(self.__find_route(owner.location, owner.desire.location))
                     
@@ -207,8 +208,18 @@ class Controller(object):
                     print(__debug_msg, file=sys.stderr, flush=True)
                     log.debug(__debug_msg)
                 else:
-                    # self.__conflict_solver(_af, _o)
-                    pass
+                    _goto = self.__level.get_location(
+                        (_o.location.row, _o.location.col + 9),
+                        translate=True
+                    )  # WHERE_PUT_BOX_GOES HERE
+                    
+                    _g = Goal(
+                        _o.identifier,
+                        _goto,
+                        _o.color
+                    )
+                    _o.reschedule_desire(_g)
+                    _o.update_route(self.__find_route(_o.location, _o.desire.location))
                 
                 # Remove the obstructed agent from the 
                 try:
