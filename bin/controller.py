@@ -152,6 +152,66 @@ class Controller(object):
                 log.debug(__debug_msg)
         return {agent: _m}
     
+    def __is_location_in_route(self, location: Location):
+        """Check whether a location is in the current route of one of the agents.
+
+        Args:
+            location (Location): the location to be checked
+
+        Returns:
+            [bool]: Whether a location is in the route
+        """
+        _agts = {agent for agent in self.__agents if agent.current_route}
+        return location in {loc for agent in _agts for loc in agent.current_route}
+    
+    def __is_location_free(self, location: Location):
+        """Check whether a location is free.
+
+        Args:
+            location (Location): the location object to be checked.
+
+        Returns:
+            [bool]: Whether a location is in the set of occupied locations
+        """
+        _g_locs = {loc for loc, _ in self.__goals.items()}
+        _a_locs = {agent.location for agent in self.__agents}
+        _b_locs = {box.location for box in self.__boxes}
+        
+        return location not in _g_locs.union(_a_locs, _b_locs)
+
+    def find_free_cells(self, agents: [Agent], level: Level) -> {Location}:
+
+        #Author: Shanna & Dimos
+
+        """ Finding cells that have no potential to be occupied at the moment.
+            It is done through looking at the planned routes of all agents and excluding all the cells that are 
+            on the way from the pool of potential locations.
+        """
+
+        # sets that keeps track of free and occupied cells
+        free_cells = set()
+        occupied_cells = set()
+
+        # first we create a list of occupied cells
+      
+        for ag in agents:
+            if not ag.current_route:
+                continue
+            occupied_cells.update(ag.current_route)
+
+
+        # now we exclude occupied cells from level locations to find free cells
+        for row in level.layout:
+            free_cells.update(list(set(row) - occupied_cells))
+
+        # finally, we remove all the cells that are occupied by entities
+        for cell in list(free_cells):
+            if not self.__is_location_free(cell):
+                free_cells.remove(cell)
+
+        # returning a set of free cells (can be converted into list with "list(free_cells)")
+        return list(free_cells)
+    
     def __check_obstructions(self, obstructions: dict()):
         """Given a list of obstructions, find out what to do with it.
         """
@@ -162,8 +222,10 @@ class Controller(object):
                 if isinstance(_o, Box):
                     owner = self.get_box_owner(_o)
                     if not _o.destination:
+                        free_cells = self.find_free_cells(self.__agents, self.__level) #update number of free cells
                         _o.destination = self.__level.get_location(
-                            (_o.location.row + 1, _o.location.col + 3),
+                            #(_o.location.row + 1, _o.location.col + 3),
+                            (free_cells[0].row, free_cells[0].col),
                             translate=True
                         ) # WHERE_PUT_BOX_GOES HERE
                     owner.reschedule_desire(_o)  # update_desire gets called inside
