@@ -1,26 +1,26 @@
 import sys
-import time
 import memory
+import client
+import logging
+import numpy as np
 
 from queue import PriorityQueue
 
 from copy import deepcopy
+from eprint import deb
 
 from box import Box
-from eprint import deb
+from goal import Goal
 from state import State
-from color import Color
 from agent import Agent
 from level import Level
 from action import Action
 from location import Location
-from desire import DesireType
 from configuration import Configuration, StrategyType
 
 from itertools import groupby
 
-import numpy as np
-
+log = logging.getLogger(__name__)
 
 globals().update(Action.__members__)
 
@@ -28,106 +28,222 @@ globals().update(Action.__members__)
 class Controller(object):
     def __init__(self, configuration: Configuration):
         print('Controller initialized.', file=sys.stderr, flush=True)
+        log.debug('Controller initialized.')
+        
         self.__parse_config__(configuration)
+        self.__cached_routes = {}
+        self.__rev_cnfs = {a: [] for a in self.__agents}
     
     def __parse_config__(self, configuration: Configuration):
         """Parses Configuration into data structure with objects
         """
+        __debug_msg = 'Parsing configuration.'
+        print(__debug_msg, file=sys.stderr, flush=True)
+        log.debug(__debug_msg)
+        
         self.__level, self.__agents, self.__boxes, self.__goals = configuration.build_structure()
-        self.__strategy = configuration.race_type
+        self.__strategy = configuration.strategy_type
+        
+        __debug_msg = 'Parsing Finished.'
+        print(__debug_msg, file=sys.stderr, flush=True)
+        log.debug(__debug_msg)
                    
     def __define_initial_destinations(self):
         # Define initial destination for actors
         # Based on these destinations, agents will update their desire
+        log.debug("Checking initial destinations...")
 
-        for agent in self.__agents:
-            agent.goals = self.__goals_for_agent(agent)
-            
+        # @ATTENTION: DO NOT CHANGE THE ORDERING BELOW
+                
+        # 1) First we find destination for the boxes
         for box in self.__boxes:
+            _d = self.__destination_for_box(box)
             box.destination = self.__destination_for_box(box)
+            if _d: box.update_route(self.__find_route(box.location, _d))
+            
+        # 2) Based on 1, we find goals for the agents
+        for agent in self.__agents:
+            agent.goals = self.__goal_for_agent(agent)
         
-    def __is_route_free(self, agent: Agent, route: [Location, ...]):
-        """Check whether a given route obstructed by something
-        """
-
-        # Check the position of all agents, ignoring the one making the route
-        agent_locs = set(agt.location for agt in self.__agents if agent != agt)
-        box_locs = set(box.location for box in self.__boxes)
+        log.debug("Finished initial destinations.")
+            
+    def get_box_owner(self, box: 'Box') -> 'Agent':
+        for agent in self.__agents:
+            if agent.color == box.color:
+                return agent
         
-        for loc in route:
-            # Check if the location is a wall (shouldn't be, but dobble checking)
-            if loc.is_wall:
-                raise Exception("The path is blocked by a wall (?). find_route broken?")
-
-            # Check if there is something in the way
-            if loc in agent_locs or loc in box_locs:
-                return False
-
-        return True
+        __err = '%s has no owner (?).' % box
+        log.error(__err)
+        raise Exception(__err)
     
-    def __adapt_level(self, route: [[Location, ...], ...]):
+    def __adapt_level(self, agent: 'Agent', conflicts=None):
         """Copy and modify the level according to the route.
-        
-        We blur out any location that:
-            1) is not in the route;
-            2) is not is a neighbor location in the route;
-            3) is not a wall;
-            4) is not a goal.
-            
-        The reason for this is to give the search a sub-set of the level,
-        so the search space is reduced. The reason not to blurry everything but the route
-        is that we want to ensure the agent has enough space to manouver in case this is necessary.
-        
-        Example with path from [L1,2, L2,2, L2,3] (0-based indexes):
-        
-        [x, x, x, x, x, x]
-        [x, -, -, -, x, x]
-        [-, -, -, -, -, x]
-        [x, -, -, -, x, x]
-        [x, x, x, x, x, x]
-        
-        x == blurred
-        
-        At this point we assume the route given is achievable (__is_route_free was called).
-        
-        Args:
-            route ([Location, ...]): List of locations leading from point A to B.
-            
-        Returns:
-            (Level): modified copy of the given level.
         """
+        __a = {agent, }
+        __b = {agent.desire.element, } if agent.desire.is_box_desire() else set()
+        
+        if conflicts:
+            __a = __a.union(conflicts[0])
+            __b = __b.union(conflicts[1])
+        
         _level = self.__level.clone()
-        # all_neighbors = set(loc for loc in route for loc in loc.neighbors)
-        agt_neighbors = set(loc for agt in self.__agents for loc in agt.location.neighbors)
-        boxes_neighbors = set(loc for box in self.__boxes for loc in box.location.neighbors)
-        goals = set(loc for loc, goal in self.__goals.items())  # Make sure goals are not set to walls (ask me why -_-')
-        
-        for row in _level.layout:
-            for loc in row:
-                # Location is not:
-                # 1) in the route;
-                # 2) is a neighbor location in the route;
-                # 3) is not already a wall.
-                # 4) Is not a goal
-                if not (loc in route or loc in agt_neighbors.union(boxes_neighbors) or loc.is_wall or loc in goals):
-                    loc.is_wall = True
-        deb(_level)
-        return _level
+        _agents = deepcopy(np.array(list(__a)))
+        _boxes = deepcopy(np.array(list(__b)))
+        _goals = self.__goals
+        return _level, _agents, _boxes, _goals
     
-    def __solve_conflicts(self, level: Level, agents: [Agent, ...], boxes: [Box, ...]):
-        """Solve conflicts in agents' routes
+    def __conflict_solver(self, agent: Agent, other_agent: Agent, current_route=None, delay_plan=True):
+        """
+        Check whether two agents have overlaping routes.
+        If no route is given, the agent's actual route is checked.
+        
+        If delay_plan is passed, introduces NoOps in the begining of the plan.
         """
         
-        frontier = set()
+        if not current_route: 
+            route = agent.current_route
+        else:
+            route = current_route
+            
+        conflicts = False  # Do conflicts exist?
+            
+        for _r1, _r2 in zip(route, other_agent.current_route):
+            if _r1 == _r2:
+                if delay_plan:
+                    _oplan = other_agent.actions
+                    other_agent.clear_actions(keep_route=True)
+                    plan = [Action.NoOp, ]
+                    plan.extend(_oplan)
+                else:
+                    plan = [Action.NoOp, ]
+                    
+                other_agent.update_actions(plan)
+                conflicts = True
+        
+        return conflicts
+        
+    def __route_sweeper(self, agent: Agent, route: ['Location', ...], ignore=set(), include_routes=False):
+        """Given a route, check whether something is standing in it.
+        The idea is to clear the route so this agent can move.
+
+        Args:
+            route ([Location]): the route
+            ignore ([Actor]): In case any actor should be ignored from it
+
+        Returns:
+            [{}]: a dictionary with with the agent and the actors in its route.
+        """
+        _alocs = {agent.location: agent for agent in self.__agents}
+        _blocs = {box.location: box for box in self.__boxes}
+        _alocs.update(_blocs)
+        _m = []
+        
+        for _l in route:
+            if _l in _alocs: 
+                _a = _alocs[_l]
+                if ignore:
+                    if _a not in ignore:
+                        _m.append(_a)
+                else:
+                    _m.append(_a)
+                    
+                __debug_msg = 'Actor %s found on route %s.' % (_a, route)
+                print(__debug_msg, file=sys.stderr, flush=True)
+                log.debug(__debug_msg)
+        return {agent: _m}
+    
+    def __is_location_in_route(self, location: Location):
+        """Check whether a location is in the current route of one of the agents.
+
+        Args:
+            location (Location): the location to be checked
+
+        Returns:
+            [bool]: Whether a location is in the route
+        """
+        _agts = {agent for agent in self.__agents if agent.current_route}
+        return location in {loc for agent in _agts for loc in agent.current_route}
+    
+    def __is_location_free(self, location: Location):
+        """Check whether a location is free.
+
+        Args:
+            location (Location): the location object to be checked.
+
+        Returns:
+            [bool]: Whether a location is in the set of occupied locations
+        """
+        _g_locs = {loc for loc, _ in self.__goals.items()}
+        _a_locs = {agent.location for agent in self.__agents}
+        _b_locs = {box.location for box in self.__boxes}
+        
+        return location not in _g_locs.union(_a_locs, _b_locs)
+    
+    def __check_obstructions(self, obstructions: dict()):
+        """Given a list of obstructions, find out what to do with it.
+        """
+        
+        # Affected agent, list of obstructing agents
+        for _af, in_the_way in obstructions.items():
+            for _o in in_the_way:
+                if isinstance(_o, Box):
+                    owner = self.get_box_owner(_o)
+                    if not _o.destination:
+                        _o.destination = self.__level.get_location(
+                            (_o.location.row + 1, _o.location.col + 3),
+                            translate=True
+                        ) # WHERE_PUT_BOX_GOES HERE
+                        
+                    owner.reschedule_desire(_o)  # update_desire gets called inside
+                    owner.update_route(self.__find_route(owner.location, owner.desire.location))
+                    
+                    # Deal with conflict
+                    if not owner.equals(_af):
+                        # If the conflict is in between one agent and another agent's box
+                        # We make the affected agent wait until the box is removed
+                        # Waits for: length of the current path  plus the sum of row and col (at destination)
+                        self.__make_agent_wait(owner, _af, len(owner.current_route) + (_o.location.row + _o.location.col))
+                    
+                    __debug_msg = 'Rescheduling desire for Agent %s. New desire is %s.' % (owner.identifier, owner.desire)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    log.debug(__debug_msg)
+                else:
+                    _goto = self.__level.get_location(
+                        (_o.location.row, _o.location.col + 9),
+                        translate=True
+                    )  # WHERE_PUT_BOX_GOES HERE
+                    
+                    _g = Goal(
+                        _o.identifier,
+                        _goto,
+                        _o.color
+                    )
+                    _o.reschedule_desire(_g)
+                    _o.update_route(self.__find_route(_o.location, _o.desire.location))
+                
+                # Remove the obstructed agent from the 
+                try:
+                    if _af in obstructions[_o]:
+                        obstructions[_o].remove(_af)
+                except KeyError:
+                    pass
+                
+        del obstructions[_af]
+    
+    def __state_search(self, level: Level, agents: [Agent, ...], boxes: [Box, ...], goals: [Goal, ...]):
+        """State space for current agent's plan
+        """
+
+        frontier = PriorityQueue()
         iterations = 0
         # frontier = set of all leaf nodes available for expansion
-        frontier.add(State(level, agents, boxes))
+        frontier.put((0, State(level, agents, boxes, goals)))
         explored = set()
         
         while True:
 
             iterations += 1
-            if iterations % 10000 == 0:
+            if iterations % 50 == 0:
                 memory.print_search_status(explored, frontier)
 
             if memory.get_usage() > memory._max_usage:
@@ -136,139 +252,313 @@ class Controller(object):
                 return None
 
             # if the frontier is empty then return failure
-            if frontier == set():
-                return None
+            if frontier.empty():
+                __err = "Could not solve conflicts. Problem infeasible?"
+                log.error(__err)
+                raise Exception(__err)
 
             # choose a leaf node and remove it from the frontier
-            state = frontier.pop()
+            _, state = frontier.get()
 
             # if the node contains a goal state then return the corresponding solution
             if state.is_goal_state():
-                return state.extract_actions()
+                return state.extract_actors(), state.extract_actions()
 
             # add the node to the explored set
             explored.add(state)
-
+            
             # expand the chosen node, adding the resulting nodes to the frontier
             # only if not in the frontier or explored set
             expanded = state.get_expanded_states()
 
             for n in expanded:
-                if not (n in frontier or n in explored):
-                    frontier.add(n)
-
-    def __planner(self):
-        # Assign route for agents
-        agents = self.__agents
-        boxes = self.__boxes
-
-        # @TODO: Improve which agent gets picked up first
-        # @TODO: Allow parallelism between agent actions
-        for agent in agents:
-            if agent.desire_type == DesireType.MOVE_TO_GOAL:
-                destination = agent.desire.location
-                route = self.__find_path(agent.location, destination)
-
-                if self.__is_route_free(agent, route):
-                    # Allow the agent to execute its route
-                    agent.update_route(route)
-                    actions = agent.derive_move_actions()
-                    act_sz = len(actions)
-                    agent.update_actions(actions)
-                    agent.move(destination)
+                rnode = n.h, n
+                if not (rnode in frontier.queue or n in explored):
+                    frontier.put(rnode)
                     
-                    # Update other agents' actions by making them wait
-                    # @TODO: If no conflict, then agents can perform things in parallel
-                    # @TODO: Improve. What to do while one agent is fulfilling its desire?
-                    for other_agt in agents:
-                        if other_agt != agent:
-                            other_agt.update_route([Action.NoOp for _ in range(act_sz)])
-                            other_agt.update_actions()
-                else:
-                    # Conflicts
-                    # @TODO: Get a list of agents and their routes
-                    actions = self.__solve_conflicts(
-                        self.__adapt_level(route),
-                        deepcopy(agents),
-                        deepcopy(boxes),
+    def __agent_scheduler(self):
+        """Define agents order in plan execution.
+        Agents with furthest objectives are put further down the queue        
+        """
+        agents = self.__agents
+        _pagts = PriorityQueue()
+        _ord_agts = []
+        
+        for agt in agents:
+            _score = 0
+            for g in agt.goals:
+                # Agents are scheduled ascending 
+                # by distance from their location to their goal location
+                _score += agt.location.distance(g.location)
+                
+                if hasattr(g, 'destination'):
+                    _score +=  g.location.distance(g.destination)
+
+            _pagts.put((_score, agt))
+
+        while not _pagts.empty():
+            _, agt = _pagts.get()
+            _ord_agts.append(agt)
+            
+        return _ord_agts
+        
+    def __planner(self):
+        __debug_msg = 'Planner initialized.'
+        print(__debug_msg, file=sys.stderr, flush=True)
+        log.debug(__debug_msg)
+
+        # Assign route for agents
+        agents = self.__agent_scheduler()
+        agents_desire = True
+        
+        while agents_desire:
+            to_move = {}
+            
+            for agent in agents:
+                # Create desire from the goals
+                agent.update_desire()
+                
+                __debug_msg = 'Desire for Agent %s is %s.' % (agent.identifier, agent.desire)
+                log.debug(__debug_msg)
+                print(__debug_msg, file=sys.stderr, flush=True)
+
+                if not agent.desire.is_sleep_desire():
+                    log.debug("%s is awake! Desire is %s." % (agent, agent.desire))
+                    __debug_msg = 'Creating preliminary route for Agent %s...' % agent.identifier
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
+                    destination = agent.desire.location
+                    agent.update_route(self.__find_route(agent.location, destination))
+                    
+                    # Check whether something is on this route and add to solve it later
+                    to_move.update(self.__route_sweeper(agent, agent.current_route, ignore={agent, }))
+                    
+                    log.debug("Route for %s is %s and desire is %s " % (agent, agent.current_route, agent.desire))
+
+                    # If obstructions exist, change desires, moving agent priorities
+                    self.__check_obstructions(to_move)
+                    
+                    actions = Controller.generate_move_actions(agent.current_route)
+                    # Checkinf conflicts before generating actions
+                    agent.update_actions(actions)
+                                    
+                    # Last location from actions
+                    last_loc = self.__location_from_actions(
+                        agent.location, 
+                        actions
                     )
                     
-                    for action_list in actions:
-                        for agt, actions in action_list.items():
-                            if agt.identifier == agent.identifier:
-                                agent.move(agt.location)
-                                agent.update_actions([actions])
-                        
-        return self.__assemble()
+                    __debug_msg = "Moving %s to %s." % (agent, last_loc)
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
+                    agent.move(last_loc)  # location nearby box
+                    agent.update_desire()
+                    
+                    __debug_msg = "Performing state search..."
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
+                    list_actors, list_actions = self.__state_search(*self.__adapt_level(agent))
+                    state_agents, state_boxes = list_actors
+                                    
+                    __debug_msg = "Extracting actions..."
+                    log.debug(__debug_msg)
+                    print(__debug_msg, file=sys.stderr, flush=True)
+                    
+                    # Extracting actions
+                    agt_actions = []
+                    for acts in list_actions:
+                        for agt, action in acts.items():
+                            if agt.equals(agent):
+                                agt_actions.append(action)
+                                
+                    # Updating locations from actions received from state
+                    for a in state_agents:
+                        for agt in agents:
+                            if a.equals(agt):
+                                agt.add_to_route(a.location)
+                                agt.move(a.location)
+                                agent.update_desire()
+                                log.debug("%s moved to %s." % (agt, agt.location))
+
+                    agent.update_actions(agt_actions)
+                    log.debug('%s new route is %s with actions %s.' % (
+                        agent,
+                        agent.current_route,
+                        agent.actions
+                    ))
+                    
+                    # Updating locations from actions received from state
+                    for b in state_boxes:
+                        for box in self.__boxes:
+                            if b.equals(box):
+                                box.move(b.location)
+                                log.debug("%s moved to %s." % (box, box.location))
+                                
+            self.__check_route_conflicts()
+            
+            # Are agents satisfied?
+            agents_desire = sum([not agent.desire.is_sleep_desire() for agent in agents])
+        
+        __debug_msg = 'Sending final plan to server...'
+        log.debug(__debug_msg)
+        print(__debug_msg, file=sys.stderr, flush=True)
+        
+        self.__equalize_actions()
+        client.Client.send_to_server(self.__assemble())
+        
+    def __check_route_conflicts(self):
+        """Check route conflicts and make agents wait
+        """
+        waiting_list = {agent:[] for agent in self.__agents}
+            
+        for agent in self.__agents:
+            for other_agt in self.__agents:
+                if not agent.equals(other_agt):
+                    if agent not in waiting_list[other_agt]:
+                        conflicts = self.__conflict_solver(agent, other_agt, delay_plan=True)
+                        if conflicts:
+                            waiting_list[agent].append(other_agt)
+                
+        
+    def __location_from_actions(self, initial_loc: 'Location', actions: '[Action, ...]', return_route=False):
+        plan = []
+        last_loc = initial_loc
+        
+        for act in actions:
+            last_loc = self.__level.location_from_action(last_loc, act)
+            plan.append(last_loc)
+        
+        if return_route: return last_loc, plan
+
+        return last_loc
+        
+    def __equalize_actions(self):
+        """ Usually called after generating all actions for the agents. 
+        This method ensures all agents have the same length in actions. 
+        The difference is filled with NoOp.
+        """
+        # Equalize actions size
+        agents = self.__agents
+
+        for agent in agents:
+            act_sz = len(agent.actions)
+
+            for other_agt in agents:
+                if not other_agt.equals(agent):
+                    sz_diff = act_sz - len(other_agt.actions)
+                    # Actions of current are greater
+                    if sz_diff > 0:
+                        other_agt.update_actions(
+                            [Action.NoOp for _ in range(sz_diff)]
+                        )
+        return
+    
+    def __make_agent_wait(self, agent: Agent, other_agt: Agent, length=None):
+        """Insert NoOps for agents. 
+        Handful when one agent is executing its actions and the others have to wait.
+
+        Args:
+            agent (Agent): The agent we derive the waiting from.
+        """
+        
+        if length:
+            other_agt.update_actions([Action.NoOp for _ in range(1, length)])
+            return
+        
+        sz_dif = len(agent.actions) - len(other_agt.actions)
+        if sz_dif > 0:
+            other_agt.update_actions([Action.NoOp for _ in range(sz_dif)])
+        else:
+            # Tries to find where the route intersects
+            intersect = 0
+            for n, loc in enumerate(agent.current_route):
+                for l in other_agt.current_route:
+                    if l == loc: intersect = n
+            other_agt.update_actions([Action.NoOp for _ in range(0, intersect)])
 
     def __assemble(self) -> [Action, ...]:
-        """Gather agents actions
+        """Gather agents actions so they can be streamlined to the server
 
         Returns:
             [Action, ...]: Agent actions
         """
         
-        # Sanity check (routes must have the same length)
-        sizes = [len(agent.actions)
-                 for agent in self.__agents]  # Size of all actions
+        # Sanity check (actions must have the same length)
+        sizes = [len(agent.actions) for agent in self.__agents]  # Size of all actions
         gsiz = groupby(sizes)
 
         if next(gsiz, True) and next(gsiz, False):
+            __err = "List of Actions for agents does not have the same size."
+            log.error(__err)
             raise Exception(
-                'List of Actions for agents does not have the same size.'
+                __err
             )
         
         acts_sz = len(self.__agents[0].actions)  # number of actions
         f_route = [[] for _ in range(acts_sz)]
         
-        for action in range(acts_sz):
+        for act_index in range(acts_sz):
             for agent in self.__agents:
-                f_route[action].append(agent.actions[action])
+                f_route[act_index].append(agent.actions[act_index])
         
         return f_route
 
     def deploy(self) -> [Action, ...]:
-        print('Solving level...', file=sys.stderr, flush=True)
-        
         # Code goes here
+        log.debug("Deploying...")
         self.__define_initial_destinations()
         self.__planner()
-        
-        return self.__assemble()
-
-    def __goals_for_agents(self) -> [Location, ...]:
-        return {a: self.__goals_for_agent(a) for a in self.__agents}
+        log.debug("Finished deploying.")
     
-    def __goals_for_agent(self, agent: Agent) -> [Location, ...]:
+    def __goal_for_agent(self, agent: Agent) -> [Location, ...]:
         """Return the location of the pre-defined level goals for the given agent (if exists).
-        
-        Args:
-            agent (Agent): the agent
-
-        Raises:
-            Exception: If no goal exists for the agent.
-
-        Returns:
-            [Location, ...]: List of location objects
         """
-        _goals = {
-            loc for loc, goal in self.__goals.items() if goal.identifier == agent.identifier
-        }
+        _goals = PriorityQueue()
         
-        return _goals
+        if self.__strategy == StrategyType.AGENTS:
+            for loc, goal in self.__goals.items():
+                if goal.identifier == agent.identifier:
+                    _goals.put((agent.distance(loc), goal))
+        else:
+            for box in self.__boxes:
+                if box.destination and box.color == agent.color:
+                    _goals.put((agent.distance(box.location), box))
+        
+        f_goal = []
+        
+        # Sort boxes by score (distance)
+        while not _goals.empty():
+            f_goal.append(_goals.get()[1])
+        return f_goal
 
     def __destination_for_box(self, box: Box) -> Location:
-        _dests = {loc for loc, goal in self.__goals.items() if goal.identifier == box.identifier}
+        log.debug("Finding destination for boxes.")
         
-        if _dests: return _dests.pop()
+        _dests = PriorityQueue()
+        other_destinations = set(box.destination for box in self.__boxes if box.destination)
 
+        for loc, goal in self.__goals.items():
+            if loc not in other_destinations and goal.identifier == box.identifier:
+                dist = box.location.distance(goal.location)
+                _dests.put((dist, loc))
+                
+                log.debug("%s destination is %s, with distance %d." % (box, goal, dist))
+        
+        log.debug("Done finding destination for boxes.")
+        # If a box has more than one destination we only care about the closest
+        # @TODO: Can be improved
+        if not _dests.empty(): return _dests.get()[1]
         return None
 
-    def __find_path(self, start: Location, end: Location):
-        """ Shanna's implementatoin of A*.
-        Finds the shorted path from A to B.
+    def __find_route(self, start: Location, end: Location):
+        """ Implementatoin of Greedy BFS
+        Finds a path from A to B.
         
         Author: Shanna
+        Co-author: Elvis (heapq && route caching)
 
         Args:
             start (Location): Start location
@@ -277,56 +567,79 @@ class Controller(object):
         Returns:
             [Location]: [Location, ...]
         """
-        open_list = []
-        closed_list = []
-        parent_list = [] # (child, parent)
-
-        current_node = (start, 0)
-        open_list.append(current_node)
-
-        while len(open_list) > 0:
-
-            current_node = open_list[0]
-            for item in open_list:
-                if item[1] < current_node[1]:
-                    current_node = item
-
-            open_list.remove(current_node)
-            closed_list.append(current_node)
-
-            if current_node[0] == end:
-
-                path = []
-                current = current_node[0]
-                while current is not start:
-                    path.append(current)
-                    current = [node for node in parent_list if node[0] == current][0][1]
-
-                path.append(start)
-                return path[::-1]
+        # # This override is because of a Python variable address reference issue. 
+        # # Neighbors from the given arguments somehow disappear.
+        # # I dont have time to debug this
+        # start = self.__level.get_location((start.row, start.col), translate=True)
+        # end = self.__level.get_location((end.row, end.col), translate=True)
+        
+        class Node(object):
+            location = None
+            parent = None
+            
+            def __init__(self, location, parent):
+                self.location = location
+                self.parent = parent
                 
-            for child in current_node[0].neighbors:  
+            def __repr__(self) -> str:
+                return 'N(%s)' % self.location
+            
+            def __lt__(self, other):
+                return self.location < other.location
+        
+        frontier = PriorityQueue()
+        frontier.put((start.distance(end), Node(start, None)))
+        explored = set()
+        _rhash = hash((start, end))
+        
+        # Checking cache
+        try:
+            return self.__cached_routes[_rhash]
+        except KeyError:
+            subcache = self.check_subpath(start, end)
+            if subcache:
+               return subcache
+            #pass
+        
+        # Is end nearby?
+        if end in start.neighbors: return [end, ]
+        
+        # Compute route
+        while True:
 
-                parent_list.append((child, current_node[0]))          
+            if frontier.empty():
+                __err = "Could not find route from %s to %s." % (start, end)
+                log.error(__err)
+                raise Exception(__err)
 
-                if child in [i[0] for i in closed_list]:
-                    continue
+            _, node = frontier.get()
+            visited = node.location
 
-                if child.is_wall:
-                    print('Path: {}'.format('WALL ALERT! retard'), file=sys.stderr, flush=True)
-                    continue
+            if visited == end:
+                pnode = node.parent
+                path = [visited, ]
+                
+                while pnode:
+                    path.append(pnode.location)
+                    pnode = pnode.parent
                     
-                child_h = abs(child.col - end.col) + abs(child.row - end.row)
-                child_g = current_node[1] - child_h + 1
-                child_f = child_h + child_g
-                
-                if child in [i[0] for i in open_list] and child_f > [node for node in open_list if node[0] == child][0][1]:
-                    continue
-                
-                open_list.append((child, child_f))
+                # Revert
+                _r = path[::-1]
+                # Ignore the first position (start)
+                #_r = _r[1:]
+                self.__cached_routes.update({_rhash: _r})
+                return _r
+
+            explored.add(visited)
+            expanded = visited.neighbors
+            
+            for loc in expanded:
+                nnode = loc.distance(end), Node(loc, node)
+                if not (nnode in frontier.queue or loc in explored) and not loc.is_wall:
+                    frontier.put(nnode)
 
     @staticmethod
-    def generate_move(path: '[Location, ...]') -> '[Actions, ...]':
+    def generate_move_actions(path: '[Location, ...]') -> '[Actions, ...]':
         """Generate actions based on given locations.
 
         Author: dimos
@@ -359,7 +672,9 @@ class Controller(object):
                 path_y.append('same y')
 
             else:
-                raise Exception('Typo error: Agent cannot move 2 steps in y (rows) !')
+                __err = "Typo error: Agent cannot move 2 steps in y (rows) ! %s " % yval
+                log.error(__err)
+                raise Exception(__err)
 
         for xval in range(len(x) - 1):
 
@@ -373,7 +688,9 @@ class Controller(object):
                 path_x.append('same x')
 
             else:
-                raise Exception('Typo error: Agent cannot move 2 steps in x (columns) !')
+                __err = 'Typo error: Agent cannot move 2 steps in x (columns) ! %s ' % xval
+                log.error(__err)
+                raise Exception(__err)
 
         for i, j in zip(path_y, path_x):
 
@@ -390,6 +707,21 @@ class Controller(object):
                 pass
 
             else:
-                raise Exception('Typo error: Agent cannot move diagonally / in both directions !')
+                __err = 'Typo error: Agent cannot move diagonally / in both directions ! y: %s, x: %s' % (i, j)
+                log.error(__err)
 
         return path_y
+
+
+    def check_subpath(self, sub_start: Location, sub_end: Location):
+        sub_list = [sub_start, sub_end]
+        for i in self.__cached_routes:
+            sub_r = self.__cached_routes[i]
+            deb('sub_r', sub_r)
+            check = all(item in [sub_r] for item in [sub_list])
+            if check is True:
+                start_index = sub_r.index("sub_start")
+                end_index = sub_r.index("sub_end")
+                sub_list_path = sub_r[start_index:end_index + 1]
+                deb('sub_list_path', sub_list_path)
+                return sub_list_path
