@@ -109,17 +109,18 @@ class Controller(object):
             
         for _r1, _r2 in zip(route, other_agent.current_route):
             if _r1 == _r2:
+                conflicts = True
+                
                 if delay_plan:
                     _oplan = other_agent.actions
                     other_agent.clear_actions(keep_route=True)
-                    plan = [Action.NoOp, ]
+                    plan = [Action.NoOp for _ in range(len(agent.current_route))]
                     plan.extend(_oplan)
                 else:
                     plan = [Action.NoOp, ]
                     
                 other_agent.update_actions(plan)
-                conflicts = True
-        
+                
         return conflicts
         
     def __route_sweeper(self, agent: Agent, route: ['Location', ...], ignore=set(), include_routes=False):
@@ -446,12 +447,15 @@ class Controller(object):
             
         for agent in self.__agents:
             for other_agt in self.__agents:
+                
                 if not agent.equals(other_agt):
+                    # Keeps track of whether the conflict 
+                    # between agent and other agent has already been solved
                     if agent not in waiting_list[other_agt]:
                         conflicts = self.__conflict_solver(agent, other_agt, delay_plan=True)
+                        
                         if conflicts:
                             waiting_list[agent].append(other_agt)
-                
         
     def __location_from_actions(self, initial_loc: 'Location', actions: '[Action, ...]', return_route=False):
         plan = []
