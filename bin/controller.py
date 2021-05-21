@@ -630,7 +630,8 @@ class Controller(object):
         try:
             return self.__cached_routes[_rhash]
         except KeyError:
-            pass
+            _sb = self.__check_subpath(start, end)
+            if _sb: return _sb
         
         # Is end nearby?
         if end in start.neighbors: return [end, ]
@@ -742,3 +743,27 @@ class Controller(object):
                 log.error(__err)
 
         return path_y
+
+    def __check_subpath(self, sub_start: Location, sub_end: Location):
+        """Check whether a route is a subroute of a already calculated route in the cache.
+        
+        @Important ideally the cache structure should be changed so this idea was used more effectively.
+        
+        author: Jiayan
+
+        Args:
+            sub_start (Location): start start
+            sub_end (Location): end location
+
+        Returns:
+            [[Location, ...]]: the subroute, if any
+        """
+        sub_list = [sub_start, sub_end]
+        for i in self.__cached_routes:
+            sub_r = self.__cached_routes[i]
+            check = all(item in [sub_r] for item in [sub_list])
+            if check is True:
+                start_index = sub_r.index("sub_start")
+                end_index = sub_r.index("sub_end")
+                sub_list_path = sub_r[start_index:end_index + 1]
+                return sub_list_path
